@@ -1,6 +1,7 @@
 "use client";
 
-import { RotateCcw, Plus, Layers } from "lucide-react";
+import { useState } from "react";
+import { RotateCcw, Plus, Layers, Save } from "lucide-react";
 import { useCalculator } from "@/lib/useCalculator";
 import { obterEstrategia } from "@/lib/calculators";
 import { EMPTY_PRODUCTS, useModeloStore, useOrcamentoDetalhadoDraft, useProductStore } from "@/lib/store";
@@ -37,9 +38,35 @@ export function ProjectCalculator() {
     (s) => s.modelos.find((m) => m.id === s.modeloSelecionadoId)?.nome ?? "modelo"
   );
 
+  const [salvando, setSalvando] = useState(false);
+
   function novoOrcamento() {
     if (!confirm("Começar um novo orçamento? Os dados atuais serão apagados.")) return;
     resetDraft();
+  }
+
+  async function salvarOrcamento() {
+    const nomeCliente = prompt("Nome do cliente (opcional):");
+    if (nomeCliente === null) return; // cancelado
+    setSalvando(true);
+    try {
+      const res = await fetch("/api/orcamentos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tipo: "detalhado",
+          nomeCliente: nomeCliente.trim() || null,
+          dados: inputs,
+          total: resultado.total,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      alert('Orçamento salvo! Veja em "Salvos" no menu.');
+    } catch {
+      alert("Não consegui salvar. Confira sua conexão e tente de novo.");
+    } finally {
+      setSalvando(false);
+    }
   }
 
   return (
@@ -208,6 +235,10 @@ export function ProjectCalculator() {
                 </span>
               </div>
             ))}
+            <Button variant="outline" className="mt-1 w-full" onClick={salvarOrcamento} disabled={salvando}>
+              <Save className="h-4 w-4" />
+              {salvando ? "Salvando..." : "Salvar Orçamento"}
+            </Button>
           </CardContent>
           <CardFooter className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-zinc-900 dark:text-zinc-100">

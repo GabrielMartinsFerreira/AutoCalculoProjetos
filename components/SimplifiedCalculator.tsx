@@ -1,6 +1,7 @@
 "use client";
 
-import { Plus, RotateCcw } from "lucide-react";
+import { useState } from "react";
+import { Plus, RotateCcw, Save } from "lucide-react";
 import { useOrcamentoSimplificadoDraft, useProductStore } from "@/lib/store";
 import { useSimplifiedCalculator } from "@/lib/useSimplifiedCalculator";
 import { OPCIONAIS_PADRAO } from "@/lib/types";
@@ -23,9 +24,35 @@ export function SimplifiedCalculator() {
   const productsByModelo = useProductStore((s) => s.productsByModelo);
   const updateProduct = useProductStore((s) => s.updateProduct);
 
+  const [salvando, setSalvando] = useState(false);
+
   function novoOrcamento() {
     if (!confirm("Começar um novo orçamento simplificado? Os dados atuais serão apagados.")) return;
     resetDraft();
+  }
+
+  async function salvarOrcamento() {
+    const nomeCliente = prompt("Nome do cliente (opcional):");
+    if (nomeCliente === null) return; // cancelado
+    setSalvando(true);
+    try {
+      const res = await fetch("/api/orcamentos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tipo: "simplificado",
+          nomeCliente: nomeCliente.trim() || null,
+          dados: inputs,
+          total: null,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      alert('Orçamento salvo! Veja em "Salvos" no menu.');
+    } catch {
+      alert("Não consegui salvar. Confira sua conexão e tente de novo.");
+    } finally {
+      setSalvando(false);
+    }
   }
 
   return (
@@ -42,6 +69,10 @@ export function SimplifiedCalculator() {
             <Button size="sm" variant="outline" onClick={novoOrcamento} title="Limpar tudo e começar um orçamento novo">
               <RotateCcw className="h-4 w-4" />
               Novo Orçamento
+            </Button>
+            <Button size="sm" variant="outline" onClick={salvarOrcamento} disabled={salvando}>
+              <Save className="h-4 w-4" />
+              {salvando ? "Salvando..." : "Salvar Orçamento"}
             </Button>
             <Button size="sm" onClick={addVao}>
               <Plus className="h-4 w-4" />

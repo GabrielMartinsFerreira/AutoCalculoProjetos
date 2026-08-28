@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Layers3, Zap } from "lucide-react";
+import { FolderOpen, Layers3, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -26,6 +26,10 @@ function PageNav() {
       <Link href="/simplificado" className={linkClass(pathname === "/simplificado")}>
         <Zap className="h-4 w-4" />
         Simplificado
+      </Link>
+      <Link href="/orcamentos" className={linkClass(pathname === "/orcamentos")}>
+        <FolderOpen className="h-4 w-4" />
+        Salvos
       </Link>
     </div>
   );

@@ -102,3 +102,20 @@ export interface ResultadoSimplificado {
   area: number;
   porModelo: ResultadoSimplificadoItem[];
 }
+
+export type TipoOrcamento = "detalhado" | "simplificado";
+
+/** Linha da lista "Meus Orçamentos" — sem o payload completo de `dados`. */
+export interface OrcamentoSalvoResumo {
+  id: string;
+  tipo: TipoOrcamento;
+  nomeCliente: string | null;
+  /** Custo total (Detalhado) ou null (Simplificado compara vários modelos, sem um total único). */
+  total: number | null;
+  criadoEm: string;
+}
+
+/** Orçamento salvo completo, com o payload pronto para recarregar no rascunho. */
+export interface OrcamentoSalvoDetalhe extends OrcamentoSalvoResumo {
+  dados: ProjectInputs | SimplifiedInputs;
+}
