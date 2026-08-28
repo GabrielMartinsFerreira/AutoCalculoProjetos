@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { FolderOpen, Layers3, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { LogoutButton } from "@/components/LogoutButton";
 
 function PageNav() {
   const pathname = usePathname();
@@ -39,10 +40,12 @@ export function AppHeader({
   subtitle,
   extraControls,
   pageTabs,
+  userEmail,
 }: {
   subtitle: string;
   extraControls?: ReactNode;
   pageTabs?: ReactNode;
+  userEmail?: string;
 }) {
   return (
     <header className="reveal flex flex-col gap-4">
@@ -59,6 +62,7 @@ export function AppHeader({
           <PageNav />
           {extraControls}
           <ThemeToggle />
+          {userEmail && <LogoutButton email={userEmail} />}
         </div>
       </div>
       {pageTabs}

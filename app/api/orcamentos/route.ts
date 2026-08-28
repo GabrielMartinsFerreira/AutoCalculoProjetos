@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getUsuarioLogado } from "@/lib/dal";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import type { OrcamentoSalvoResumo, TipoOrcamento } from "@/lib/types";
 
@@ -25,6 +26,11 @@ function paraResumo(row: OrcamentoRow): OrcamentoSalvoResumo {
 }
 
 export async function GET() {
+  const usuario = await getUsuarioLogado();
+  if (!usuario) {
+    return NextResponse.json({ erro: "Não autenticado." }, { status: 401 });
+  }
+
   const supabase = supabaseAdmin();
   const { data, error } = await supabase
     .from("orcamentos")
@@ -39,6 +45,11 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const usuario = await getUsuarioLogado();
+  if (!usuario) {
+    return NextResponse.json({ erro: "Não autenticado." }, { status: 401 });
+  }
+
   const body = (await request.json()) as {
     tipo?: TipoOrcamento;
     codigo?: string | null;

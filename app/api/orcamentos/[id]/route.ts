@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getUsuarioLogado } from "@/lib/dal";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import type { OrcamentoSalvoDetalhe, TipoOrcamento } from "@/lib/types";
 
@@ -14,6 +15,11 @@ interface OrcamentoRowCompleta {
 }
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const usuario = await getUsuarioLogado();
+  if (!usuario) {
+    return NextResponse.json({ erro: "Não autenticado." }, { status: 401 });
+  }
+
   const { id } = await params;
   const supabase = supabaseAdmin();
   const { data, error } = await supabase
@@ -41,6 +47,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const usuario = await getUsuarioLogado();
+  if (!usuario) {
+    return NextResponse.json({ erro: "Não autenticado." }, { status: 401 });
+  }
+
   const { id } = await params;
   const supabase = supabaseAdmin();
   const { error } = await supabase.from("orcamentos").delete().eq("id", id);

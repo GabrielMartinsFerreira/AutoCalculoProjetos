@@ -1,5 +1,7 @@
+import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/AppHeader";
 import { OrcamentosSalvos } from "@/components/OrcamentosSalvos";
+import { getUsuarioLogado } from "@/lib/dal";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import type { OrcamentoSalvoResumo, TipoOrcamento } from "@/lib/types";
 
@@ -42,11 +44,14 @@ async function buscarOrcamentos(): Promise<{ itens: OrcamentoSalvoResumo[]; erro
 }
 
 export default async function OrcamentosPage() {
+  const usuario = await getUsuarioLogado();
+  if (!usuario) redirect("/login");
+
   const { itens, erro } = await buscarOrcamentos();
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 lg:py-8">
-      <AppHeader subtitle="Orçamentos salvos" />
+      <AppHeader subtitle="Orçamentos salvos" userEmail={usuario.email ?? ""} />
       <OrcamentosSalvos itensIniciais={itens} erroInicial={erro} />
     </div>
   );
