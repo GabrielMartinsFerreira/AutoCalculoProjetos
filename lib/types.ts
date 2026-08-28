@@ -10,7 +10,9 @@ export type ProductKey =
   | "pelicula"
   | "adicionalNoturno"
   | "portaPremium"
-  | "laDeVidro";
+  | "laDeVidro"
+  | "kitPortaSimples"
+  | "kitPortaDupla";
 
 export interface Modelo {
   id: string;
@@ -48,6 +50,8 @@ export interface ProjectInputs {
   incluirLaDeVidro: boolean;
   qtdPortaPremium: number;
   qtdNoitesInstalacao: number;
+  qtdKitPortaSimples: number;
+  qtdKitPortaDupla: number;
 }
 
 export interface CalculoItem {
@@ -109,6 +113,8 @@ export type TipoOrcamento = "detalhado" | "simplificado";
 export interface OrcamentoSalvoResumo {
   id: string;
   tipo: TipoOrcamento;
+  codigo: string | null;
+  nomeVendedor: string | null;
   nomeCliente: string | null;
   /** Custo total (Detalhado) ou null (Simplificado compara vários modelos, sem um total único). */
   total: number | null;

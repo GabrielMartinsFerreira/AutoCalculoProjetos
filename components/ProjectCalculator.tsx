@@ -12,6 +12,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { VaoRow } from "@/components/VaoRow";
+import { SalvarOrcamentoDialog, type DadosSalvarOrcamento } from "@/components/SalvarOrcamentoDialog";
+
+function GrupoFerragens({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <div className="border-t border-zinc-100 pt-4 first:border-t-0 first:pt-0 dark:border-zinc-800">
+      <p className="mb-2 font-mono text-[0.65rem] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+        {titulo}
+      </p>
+      {children}
+    </div>
+  );
+}
 
 export function ProjectCalculator() {
   const inputs = useOrcamentoDetalhadoDraft((s) => s.inputs);
@@ -38,34 +50,28 @@ export function ProjectCalculator() {
     (s) => s.modelos.find((m) => m.id === s.modeloSelecionadoId)?.nome ?? "modelo"
   );
 
-  const [salvando, setSalvando] = useState(false);
+  const [mostrarSalvar, setMostrarSalvar] = useState(false);
 
   function novoOrcamento() {
     if (!confirm("Começar um novo orçamento? Os dados atuais serão apagados.")) return;
     resetDraft();
   }
 
-  async function salvarOrcamento() {
-    const nomeCliente = prompt("Nome do cliente (opcional):");
-    if (nomeCliente === null) return; // cancelado
-    setSalvando(true);
+  async function salvarOrcamento(dadosExtra: DadosSalvarOrcamento) {
     try {
       const res = await fetch("/api/orcamentos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tipo: "detalhado",
-          nomeCliente: nomeCliente.trim() || null,
+          ...dadosExtra,
           dados: inputs,
           total: resultado.total,
         }),
       });
-      if (!res.ok) throw new Error();
-      alert('Orçamento salvo! Veja em "Salvos" no menu.');
+      return res.ok;
     } catch {
-      alert("Não consegui salvar. Confira sua conexão e tente de novo.");
-    } finally {
-      setSalvando(false);
+      return false;
     }
   }
 
@@ -113,101 +119,144 @@ export function ProjectCalculator() {
             <CardTitle>Ferragens e Opcionais</CardTitle>
             <CardDescription>Itens gerais do projeto, aplicados uma única vez</CardDescription>
           </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            <div className="flex flex-col gap-1">
-              <Label>Qtd. Puxadores H</Label>
-              <Input
-                type="number"
-                min={0}
-                value={inputs.qtdPuxadores}
-                onChange={(e) => setInputs({ ...inputs, qtdPuxadores: Number(e.target.value) })}
-                className="font-mono"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label>Qtd. Fechaduras</Label>
-              <Input
-                type="number"
-                min={0}
-                value={inputs.qtdFechaduras}
-                onChange={(e) => setInputs({ ...inputs, qtdFechaduras: Number(e.target.value) })}
-                className="font-mono"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label>Porta Premium (qtd.)</Label>
-              <Input
-                type="number"
-                min={0}
-                value={inputs.qtdPortaPremium}
-                onChange={(e) => setInputs({ ...inputs, qtdPortaPremium: Number(e.target.value) })}
-                className="font-mono"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label>Instalação Noturna (noites)</Label>
-              <Input
-                type="number"
-                min={0}
-                value={inputs.qtdNoitesInstalacao}
-                onChange={(e) => setInputs({ ...inputs, qtdNoitesInstalacao: Number(e.target.value) })}
-                className="font-mono"
-              />
-            </div>
-            <label className="flex items-center gap-2 pt-5">
-              <Checkbox
-                checked={inputs.incluirPelicula}
-                onChange={(e) => setInputs({ ...inputs, incluirPelicula: e.target.checked })}
-              />
-              <span className="text-sm text-zinc-700 dark:text-zinc-300">Incluir Película</span>
-            </label>
-            {pelicula && (
-              <div className="flex flex-col gap-1">
-                <Label>Película (R$/m²)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min={0}
-                  value={pelicula.valor}
-                  onChange={(e) =>
-                    updateProduct(modeloSelecionadoId, pelicula.id, {
-                      nome: pelicula.nome,
-                      unidade: pelicula.unidade,
-                      valor: Number(e.target.value),
-                      tipoVaoAssociado: pelicula.tipoVaoAssociado,
-                    })
-                  }
-                  className="font-mono"
-                />
+          <CardContent className="flex flex-col gap-4">
+            <GrupoFerragens titulo="Ferragens">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <div className="flex flex-col gap-1">
+                  <Label>Qtd. Puxadores H</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={inputs.qtdPuxadores}
+                    onChange={(e) => setInputs({ ...inputs, qtdPuxadores: Number(e.target.value) })}
+                    className="font-mono"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label>Fechadura PT Correr</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={inputs.qtdFechaduras}
+                    onChange={(e) => setInputs({ ...inputs, qtdFechaduras: Number(e.target.value) })}
+                    className="font-mono"
+                  />
+                </div>
               </div>
-            )}
-            <label className="flex items-center gap-2 pt-5">
-              <Checkbox
-                checked={inputs.incluirLaDeVidro}
-                onChange={(e) => setInputs({ ...inputs, incluirLaDeVidro: e.target.checked })}
-              />
-              <span className="text-sm text-zinc-700 dark:text-zinc-300">Incluir Lã de Vidro</span>
-            </label>
-            {laDeVidro && (
-              <div className="flex flex-col gap-1">
-                <Label>Lã de Vidro (R$/m²)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min={0}
-                  value={laDeVidro.valor}
-                  onChange={(e) =>
-                    updateProduct(modeloSelecionadoId, laDeVidro.id, {
-                      nome: laDeVidro.nome,
-                      unidade: laDeVidro.unidade,
-                      valor: Number(e.target.value),
-                      tipoVaoAssociado: laDeVidro.tipoVaoAssociado,
-                    })
-                  }
-                  className="font-mono"
-                />
+            </GrupoFerragens>
+
+            <GrupoFerragens titulo="Kits de Porta">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <div className="flex flex-col gap-1">
+                  <Label>Porta Premium (qtd.)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={inputs.qtdPortaPremium}
+                    onChange={(e) => setInputs({ ...inputs, qtdPortaPremium: Number(e.target.value) })}
+                    className="font-mono"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label>Kit Porta Simples (qtd.)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={inputs.qtdKitPortaSimples}
+                    onChange={(e) => setInputs({ ...inputs, qtdKitPortaSimples: Number(e.target.value) })}
+                    className="font-mono"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label>Kit Porta Dupla (qtd.)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={inputs.qtdKitPortaDupla}
+                    onChange={(e) => setInputs({ ...inputs, qtdKitPortaDupla: Number(e.target.value) })}
+                    className="font-mono"
+                  />
+                </div>
               </div>
-            )}
+            </GrupoFerragens>
+
+            <GrupoFerragens titulo="Acabamentos">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-2 rounded-lg border border-zinc-100 p-3 dark:border-zinc-800">
+                  <label className="flex items-center gap-2">
+                    <Checkbox
+                      checked={inputs.incluirPelicula}
+                      onChange={(e) => setInputs({ ...inputs, incluirPelicula: e.target.checked })}
+                    />
+                    <span className="text-sm text-zinc-700 dark:text-zinc-300">Incluir Película</span>
+                  </label>
+                  {pelicula && (
+                    <div className="flex flex-col gap-1">
+                      <Label>Película (R$/m²)</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        value={pelicula.valor}
+                        onChange={(e) =>
+                          updateProduct(modeloSelecionadoId, pelicula.id, {
+                            nome: pelicula.nome,
+                            unidade: pelicula.unidade,
+                            valor: Number(e.target.value),
+                            tipoVaoAssociado: pelicula.tipoVaoAssociado,
+                          })
+                        }
+                        className="font-mono"
+                      />
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-col gap-2 rounded-lg border border-zinc-100 p-3 dark:border-zinc-800">
+                  <label className="flex items-center gap-2">
+                    <Checkbox
+                      checked={inputs.incluirLaDeVidro}
+                      onChange={(e) => setInputs({ ...inputs, incluirLaDeVidro: e.target.checked })}
+                    />
+                    <span className="text-sm text-zinc-700 dark:text-zinc-300">Incluir Lã de Vidro</span>
+                  </label>
+                  {laDeVidro && (
+                    <div className="flex flex-col gap-1">
+                      <Label>Lã de Vidro (R$/m²)</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        value={laDeVidro.valor}
+                        onChange={(e) =>
+                          updateProduct(modeloSelecionadoId, laDeVidro.id, {
+                            nome: laDeVidro.nome,
+                            unidade: laDeVidro.unidade,
+                            valor: Number(e.target.value),
+                            tipoVaoAssociado: laDeVidro.tipoVaoAssociado,
+                          })
+                        }
+                        className="font-mono"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </GrupoFerragens>
+
+            <GrupoFerragens titulo="Serviços">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <div className="flex flex-col gap-1">
+                  <Label>Instalação Noturna (noites)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={inputs.qtdNoitesInstalacao}
+                    onChange={(e) => setInputs({ ...inputs, qtdNoitesInstalacao: Number(e.target.value) })}
+                    className="font-mono"
+                  />
+                </div>
+              </div>
+            </GrupoFerragens>
           </CardContent>
         </Card>
       </div>
@@ -235,9 +284,9 @@ export function ProjectCalculator() {
                 </span>
               </div>
             ))}
-            <Button variant="outline" className="mt-1 w-full" onClick={salvarOrcamento} disabled={salvando}>
+            <Button variant="outline" className="mt-1 w-full" onClick={() => setMostrarSalvar(true)}>
               <Save className="h-4 w-4" />
-              {salvando ? "Salvando..." : "Salvar Orçamento"}
+              Salvar Orçamento
             </Button>
           </CardContent>
           <CardFooter className="flex items-center justify-between">
@@ -250,6 +299,10 @@ export function ProjectCalculator() {
           </CardFooter>
         </Card>
       </div>
+
+      {mostrarSalvar && (
+        <SalvarOrcamentoDialog onClose={() => setMostrarSalvar(false)} onConfirmar={salvarOrcamento} />
+      )}
     </div>
   );
 }

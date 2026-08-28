@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FolderOpen, Layers3, Trash2, Zap } from "lucide-react";
+import { FolderOpen, Layers3, Search, Trash2, Zap } from "lucide-react";
 import { useOrcamentoDetalhadoDraft, useOrcamentoSimplificadoDraft } from "@/lib/store";
 import type { OrcamentoSalvoDetalhe, OrcamentoSalvoResumo, ProjectInputs, SimplifiedInputs } from "@/lib/types";
 import { formatBRL } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 
 function formatarData(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR", {
@@ -29,9 +30,20 @@ export function OrcamentosSalvos({
   const [itens, setItens] = useState<OrcamentoSalvoResumo[]>(itensIniciais);
   const [erro] = useState<string | null>(erroInicial);
   const [carregandoId, setCarregandoId] = useState<string | null>(null);
+  const [busca, setBusca] = useState("");
   const router = useRouter();
   const setInputsDetalhado = useOrcamentoDetalhadoDraft((s) => s.setInputs);
   const setInputsSimplificado = useOrcamentoSimplificadoDraft((s) => s.setInputs);
+
+  const itensFiltrados = useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    if (!termo) return itens;
+    return itens.filter((item) =>
+      [item.nomeCliente, item.nomeVendedor, item.codigo]
+        .filter(Boolean)
+        .some((campo) => campo!.toLowerCase().includes(termo))
+    );
+  }, [itens, busca]);
 
   async function abrir(item: OrcamentoSalvoResumo) {
     setCarregandoId(item.id);
@@ -66,9 +78,22 @@ export function OrcamentosSalvos({
 
   return (
     <Card className="reveal">
-      <CardHeader>
-        <CardTitle>Meus Orçamentos</CardTitle>
-        <CardDescription>{itens.length} orçamento(s) salvo(s)</CardDescription>
+      <CardHeader className="flex-row items-center justify-between gap-3">
+        <div>
+          <CardTitle>Meus Orçamentos</CardTitle>
+          <CardDescription>{itens.length} orçamento(s) salvo(s)</CardDescription>
+        </div>
+        {itens.length > 0 && (
+          <div className="relative w-full max-w-[220px]">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+            <Input
+              placeholder="Buscar cliente, código..."
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              className="pl-8 text-xs"
+            />
+          </div>
+        )}
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {erro && (
@@ -82,7 +107,12 @@ export function OrcamentosSalvos({
             Simplificado.
           </p>
         )}
-        {itens.map((item) => (
+        {itens.length > 0 && itensFiltrados.length === 0 && (
+          <p className="py-6 text-center text-sm text-zinc-400 dark:text-zinc-500">
+            Nenhum orçamento bate com &quot;{busca}&quot;.
+          </p>
+        )}
+        {itensFiltrados.map((item) => (
           <div
             key={item.id}
             className="flex flex-col gap-3 rounded-lg border border-zinc-100 p-3 sm:flex-row sm:items-center sm:justify-between dark:border-zinc-800"
@@ -92,11 +122,19 @@ export function OrcamentosSalvos({
                 {item.tipo === "detalhado" ? <Layers3 className="h-4 w-4" /> : <Zap className="h-4 w-4" />}
               </span>
               <div>
-                <p className="font-medium text-zinc-800 dark:text-zinc-100">
-                  {item.nomeCliente || "Sem nome de cliente"}
-                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-medium text-zinc-800 dark:text-zinc-100">
+                    {item.nomeCliente || "Sem nome de cliente"}
+                  </p>
+                  {item.codigo && (
+                    <span className="rounded bg-cyan-50 px-1.5 py-0.5 font-mono text-[0.65rem] font-medium text-cyan-700 dark:bg-cyan-950/50 dark:text-cyan-300">
+                      {item.codigo}
+                    </span>
+                  )}
+                </div>
                 <p className="font-mono text-xs text-zinc-400 dark:text-zinc-500">
                   {item.tipo === "detalhado" ? "Detalhado" : "Simplificado"} · {formatarData(item.criadoEm)}
+                  {item.nomeVendedor && ` · Vendedor: ${item.nomeVendedor}`}
                 </p>
               </div>
             </div>

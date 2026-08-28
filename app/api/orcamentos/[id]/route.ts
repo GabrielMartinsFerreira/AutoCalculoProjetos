@@ -5,6 +5,8 @@ import type { OrcamentoSalvoDetalhe, TipoOrcamento } from "@/lib/types";
 interface OrcamentoRowCompleta {
   id: string;
   tipo: TipoOrcamento;
+  codigo: string | null;
+  nome_vendedor: string | null;
   nome_cliente: string | null;
   total: number | null;
   dados: OrcamentoSalvoDetalhe["dados"];
@@ -16,7 +18,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const supabase = supabaseAdmin();
   const { data, error } = await supabase
     .from("orcamentos")
-    .select("id, tipo, nome_cliente, total, dados, criado_em")
+    .select("id, tipo, codigo, nome_vendedor, nome_cliente, total, dados, criado_em")
     .eq("id", id)
     .single();
 
@@ -28,6 +30,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const resultado: OrcamentoSalvoDetalhe = {
     id: row.id,
     tipo: row.tipo,
+    codigo: row.codigo,
+    nomeVendedor: row.nome_vendedor,
     nomeCliente: row.nome_cliente,
     total: row.total,
     dados: row.dados,

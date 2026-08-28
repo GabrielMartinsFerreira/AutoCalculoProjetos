@@ -6,6 +6,8 @@ create extension if not exists pgcrypto;
 create table if not exists orcamentos (
   id uuid primary key default gen_random_uuid(),
   tipo text not null check (tipo in ('detalhado', 'simplificado')),
+  codigo text,
+  nome_vendedor text,
   nome_cliente text,
   total numeric,
   dados jsonb not null,

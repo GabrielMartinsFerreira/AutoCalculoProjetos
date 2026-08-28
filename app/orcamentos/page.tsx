@@ -9,6 +9,8 @@ export const dynamic = "force-dynamic";
 interface OrcamentoRow {
   id: string;
   tipo: TipoOrcamento;
+  codigo: string | null;
+  nome_vendedor: string | null;
   nome_cliente: string | null;
   total: number | null;
   criado_em: string;
@@ -19,7 +21,7 @@ async function buscarOrcamentos(): Promise<{ itens: OrcamentoSalvoResumo[]; erro
     const supabase = supabaseAdmin();
     const { data, error } = await supabase
       .from("orcamentos")
-      .select("id, tipo, nome_cliente, total, criado_em")
+      .select("id, tipo, codigo, nome_vendedor, nome_cliente, total, criado_em")
       .order("criado_em", { ascending: false });
 
     if (error) return { itens: [], erro: error.message };
@@ -27,6 +29,8 @@ async function buscarOrcamentos(): Promise<{ itens: OrcamentoSalvoResumo[]; erro
     const itens = (data as OrcamentoRow[]).map((row) => ({
       id: row.id,
       tipo: row.tipo,
+      codigo: row.codigo,
+      nomeVendedor: row.nome_vendedor,
       nomeCliente: row.nome_cliente,
       total: row.total,
       criadoEm: row.criado_em,

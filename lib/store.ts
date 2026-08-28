@@ -5,6 +5,7 @@ import type {
   Modelo,
   OpcionaisSimplificado,
   Product,
+  ProductKey,
   ProjectInputs,
   SimplifiedInputs,
   Vao,
@@ -58,7 +59,7 @@ const SEED_PRODUCTS: Product[] = [
   {
     id: "fechadura",
     key: "fechadura",
-    nome: "Fechadura para porta",
+    nome: "Fechadura PT Correr",
     unidade: "un",
     valor: 300,
     tipoVaoAssociado: null,
@@ -95,7 +96,31 @@ const SEED_PRODUCTS: Product[] = [
     valor: 150,
     tipoVaoAssociado: null,
   },
+  {
+    id: "kitPortaSimples",
+    key: "kitPortaSimples",
+    nome: "Kit Porta Simples",
+    unidade: "un",
+    valor: 600,
+    tipoVaoAssociado: null,
+  },
+  {
+    id: "kitPortaDupla",
+    key: "kitPortaDupla",
+    nome: "Kit Porta Dupla",
+    unidade: "un",
+    valor: 920,
+    tipoVaoAssociado: null,
+  },
 ];
+
+/**
+ * Chaves de produtos adicionados depois que os primeiros usuários já tinham um
+ * catálogo salvo no navegador — precisam ser injetados em todo modelo já
+ * existente (não só nos modelos novos), senão o item nunca aparece pra quem já
+ * tinha dados persistidos.
+ */
+const CHAVES_NOVAS_RETROATIVAS: ProductKey[] = ["kitPortaSimples", "kitPortaDupla"];
 
 /**
  * Catálogo de produtos independente por modelo: cada Modelo.id tem sua própria
@@ -167,10 +192,21 @@ export const useProductStore = create<ProductStore>()(
         // que o usuário já tem e já customizou continuam intocados.
         if (persistedState.productsByModelo) {
           const productsByModelo = Object.fromEntries(
-            Object.entries(persistedState.productsByModelo).map(([modeloId, produtos]) => [
-              modeloId,
-              produtos.map((p) => ({ ...p, tipoVaoAssociado: p.tipoVaoAssociado ?? null })),
-            ])
+            Object.entries(persistedState.productsByModelo).map(([modeloId, produtos]) => {
+              const atualizados = produtos.map((p) => ({
+                ...p,
+                tipoVaoAssociado: p.tipoVaoAssociado ?? null,
+                // "Fechadura para porta" foi renomeada — mantém o valor já customizado
+                // pelo usuário, só corrige o nome de quem ainda tem o antigo.
+                nome: p.key === "fechadura" && p.nome === "Fechadura para porta" ? "Fechadura PT Correr" : p.nome,
+              }));
+              // Kits de porta são novos: injeta em todo modelo que ainda não tem (modelos
+              // já customizados pelo usuário não perdem nada, só ganham os itens que faltam).
+              const faltando = CHAVES_NOVAS_RETROATIVAS.filter(
+                (key) => !atualizados.some((p) => p.key === key)
+              ).map((key) => SEED_PRODUCTS.find((p) => p.key === key)!);
+              return [modeloId, [...atualizados, ...faltando]];
+            })
           );
           for (const id of SEED_MODELO_IDS) {
             if (!(id in productsByModelo)) {
@@ -281,6 +317,8 @@ const INPUTS_DETALHADO_INICIAL: ProjectInputs = {
   incluirLaDeVidro: false,
   qtdPortaPremium: 0,
   qtdNoitesInstalacao: 0,
+  qtdKitPortaSimples: 0,
+  qtdKitPortaDupla: 0,
 };
 
 interface OrcamentoDetalhadoDraftStore {

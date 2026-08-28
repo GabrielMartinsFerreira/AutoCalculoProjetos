@@ -32,7 +32,7 @@ export function calcularOrcamento(
       subtotal: inputs.qtdPuxadores * getValor("puxadorH"),
     },
     {
-      label: "Fechadura para porta",
+      label: "Fechadura PT Correr",
       detalhe: `${inputs.qtdFechaduras} un`,
       subtotal: inputs.qtdFechaduras * getValor("fechadura"),
     },
@@ -50,6 +50,16 @@ export function calcularOrcamento(
       label: "Porta Premium",
       detalhe: `${inputs.qtdPortaPremium} un`,
       subtotal: inputs.qtdPortaPremium * getValor("portaPremium"),
+    },
+    {
+      label: "Kit Porta Simples",
+      detalhe: `${inputs.qtdKitPortaSimples} un`,
+      subtotal: inputs.qtdKitPortaSimples * getValor("kitPortaSimples"),
+    },
+    {
+      label: "Kit Porta Dupla",
+      detalhe: `${inputs.qtdKitPortaDupla} un`,
+      subtotal: inputs.qtdKitPortaDupla * getValor("kitPortaDupla"),
     },
     {
       label: "Adicional Noturno",

@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { VaoSimplesRow } from "@/components/VaoSimplesRow";
+import { SalvarOrcamentoDialog, type DadosSalvarOrcamento } from "@/components/SalvarOrcamentoDialog";
 
 export function SimplifiedCalculator() {
   const inputs = useOrcamentoSimplificadoDraft((s) => s.inputs);
@@ -24,34 +25,28 @@ export function SimplifiedCalculator() {
   const productsByModelo = useProductStore((s) => s.productsByModelo);
   const updateProduct = useProductStore((s) => s.updateProduct);
 
-  const [salvando, setSalvando] = useState(false);
+  const [mostrarSalvar, setMostrarSalvar] = useState(false);
 
   function novoOrcamento() {
     if (!confirm("Começar um novo orçamento simplificado? Os dados atuais serão apagados.")) return;
     resetDraft();
   }
 
-  async function salvarOrcamento() {
-    const nomeCliente = prompt("Nome do cliente (opcional):");
-    if (nomeCliente === null) return; // cancelado
-    setSalvando(true);
+  async function salvarOrcamento(dadosExtra: DadosSalvarOrcamento) {
     try {
       const res = await fetch("/api/orcamentos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tipo: "simplificado",
-          nomeCliente: nomeCliente.trim() || null,
+          ...dadosExtra,
           dados: inputs,
           total: null,
         }),
       });
-      if (!res.ok) throw new Error();
-      alert('Orçamento salvo! Veja em "Salvos" no menu.');
+      return res.ok;
     } catch {
-      alert("Não consegui salvar. Confira sua conexão e tente de novo.");
-    } finally {
-      setSalvando(false);
+      return false;
     }
   }
 
@@ -70,9 +65,9 @@ export function SimplifiedCalculator() {
               <RotateCcw className="h-4 w-4" />
               Novo Orçamento
             </Button>
-            <Button size="sm" variant="outline" onClick={salvarOrcamento} disabled={salvando}>
+            <Button size="sm" variant="outline" onClick={() => setMostrarSalvar(true)}>
               <Save className="h-4 w-4" />
-              {salvando ? "Salvando..." : "Salvar Orçamento"}
+              Salvar Orçamento
             </Button>
             <Button size="sm" onClick={addVao}>
               <Plus className="h-4 w-4" />
@@ -282,6 +277,10 @@ export function SimplifiedCalculator() {
           )}
         </div>
       </div>
+
+      {mostrarSalvar && (
+        <SalvarOrcamentoDialog onClose={() => setMostrarSalvar(false)} onConfirmar={salvarOrcamento} />
+      )}
     </div>
   );
 }
