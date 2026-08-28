@@ -1,0 +1,224 @@
+"use client";
+
+import { RotateCcw, Plus, Layers } from "lucide-react";
+import { useCalculator } from "@/lib/useCalculator";
+import { obterEstrategia } from "@/lib/calculators";
+import { EMPTY_PRODUCTS, useModeloStore, useOrcamentoDetalhadoDraft, useProductStore } from "@/lib/store";
+import { formatBRL } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { VaoRow } from "@/components/VaoRow";
+
+export function ProjectCalculator() {
+  const inputs = useOrcamentoDetalhadoDraft((s) => s.inputs);
+  const setInputs = useOrcamentoDetalhadoDraft((s) => s.setInputs);
+  const addVao = useOrcamentoDetalhadoDraft((s) => s.addVao);
+  const updateVao = useOrcamentoDetalhadoDraft((s) => s.updateVao);
+  const removeVao = useOrcamentoDetalhadoDraft((s) => s.removeVao);
+  const resetDraft = useOrcamentoDetalhadoDraft((s) => s.reset);
+  const modeloSelecionadoId = useModeloStore((s) => s.modeloSelecionadoId);
+  const resultado = useCalculator(inputs, modeloSelecionadoId);
+  const estrategia = obterEstrategia(modeloSelecionadoId);
+  const produtosDoModelo = useProductStore(
+    (s) => s.productsByModelo[modeloSelecionadoId] ?? EMPTY_PRODUCTS
+  );
+  const pelicula = produtosDoModelo.find((p) => p.key === "pelicula");
+  const laDeVidro = produtosDoModelo.find((p) => p.key === "laDeVidro");
+  const updateProduct = useProductStore((s) => s.updateProduct);
+  // Mesmo quando a fórmula do modelo não usa o tipo do vão, o campo precisa
+  // continuar visível se algum produto do catálogo estiver vinculado a um tipo —
+  // senão o vínculo nunca teria como bater (o vão ficaria travado em "Fixo").
+  const temProdutoVinculado = produtosDoModelo.some((p) => p.tipoVaoAssociado !== null);
+  const mostrarTipoVao = estrategia.usaTipoVao || temProdutoVinculado;
+  const nomeModelo = useModeloStore(
+    (s) => s.modelos.find((m) => m.id === s.modeloSelecionadoId)?.nome ?? "modelo"
+  );
+
+  function novoOrcamento() {
+    if (!confirm("Começar um novo orçamento? Os dados atuais serão apagados.")) return;
+    resetDraft();
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_360px]">
+      <div className="flex flex-col gap-5">
+        <Card className="reveal" style={{ animationDelay: "40ms" }}>
+          <CardHeader className="flex-row items-center justify-between">
+            <div>
+              <CardTitle>Vãos (Módulos da {nomeModelo})</CardTitle>
+              <CardDescription>Adicione cada vão do projeto com sua largura, altura e tipo</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={novoOrcamento} title="Limpar tudo e começar um orçamento novo">
+                <RotateCcw className="h-4 w-4" />
+                Novo Orçamento
+              </Button>
+              <Button size="sm" onClick={addVao}>
+                <Plus className="h-4 w-4" />
+                Adicionar Vão
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {inputs.vaos.map((vao, i) => (
+              <VaoRow
+                key={vao.id}
+                vao={vao}
+                index={i}
+                mostrarTipo={mostrarTipoVao}
+                onChange={(v) => updateVao(vao.id, v)}
+                onRemove={() => removeVao(vao.id)}
+              />
+            ))}
+            {inputs.vaos.length === 0 && (
+              <p className="py-6 text-center text-sm text-zinc-400 dark:text-zinc-500">
+                Nenhum vão adicionado. Clique em &quot;Adicionar Vão&quot;.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="reveal" style={{ animationDelay: "120ms" }}>
+          <CardHeader>
+            <CardTitle>Ferragens e Opcionais</CardTitle>
+            <CardDescription>Itens gerais do projeto, aplicados uma única vez</CardDescription>
+          </CardHeader>
+          <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <div className="flex flex-col gap-1">
+              <Label>Qtd. Puxadores H</Label>
+              <Input
+                type="number"
+                min={0}
+                value={inputs.qtdPuxadores}
+                onChange={(e) => setInputs({ ...inputs, qtdPuxadores: Number(e.target.value) })}
+                className="font-mono"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label>Qtd. Fechaduras</Label>
+              <Input
+                type="number"
+                min={0}
+                value={inputs.qtdFechaduras}
+                onChange={(e) => setInputs({ ...inputs, qtdFechaduras: Number(e.target.value) })}
+                className="font-mono"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label>Porta Premium (qtd.)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={inputs.qtdPortaPremium}
+                onChange={(e) => setInputs({ ...inputs, qtdPortaPremium: Number(e.target.value) })}
+                className="font-mono"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label>Instalação Noturna (noites)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={inputs.qtdNoitesInstalacao}
+                onChange={(e) => setInputs({ ...inputs, qtdNoitesInstalacao: Number(e.target.value) })}
+                className="font-mono"
+              />
+            </div>
+            <label className="flex items-center gap-2 pt-5">
+              <Checkbox
+                checked={inputs.incluirPelicula}
+                onChange={(e) => setInputs({ ...inputs, incluirPelicula: e.target.checked })}
+              />
+              <span className="text-sm text-zinc-700 dark:text-zinc-300">Incluir Película</span>
+            </label>
+            {pelicula && (
+              <div className="flex flex-col gap-1">
+                <Label>Película (R$/m²)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  value={pelicula.valor}
+                  onChange={(e) =>
+                    updateProduct(modeloSelecionadoId, pelicula.id, {
+                      nome: pelicula.nome,
+                      unidade: pelicula.unidade,
+                      valor: Number(e.target.value),
+                      tipoVaoAssociado: pelicula.tipoVaoAssociado,
+                    })
+                  }
+                  className="font-mono"
+                />
+              </div>
+            )}
+            <label className="flex items-center gap-2 pt-5">
+              <Checkbox
+                checked={inputs.incluirLaDeVidro}
+                onChange={(e) => setInputs({ ...inputs, incluirLaDeVidro: e.target.checked })}
+              />
+              <span className="text-sm text-zinc-700 dark:text-zinc-300">Incluir Lã de Vidro</span>
+            </label>
+            {laDeVidro && (
+              <div className="flex flex-col gap-1">
+                <Label>Lã de Vidro (R$/m²)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  value={laDeVidro.valor}
+                  onChange={(e) =>
+                    updateProduct(modeloSelecionadoId, laDeVidro.id, {
+                      nome: laDeVidro.nome,
+                      unidade: laDeVidro.unidade,
+                      valor: Number(e.target.value),
+                      tipoVaoAssociado: laDeVidro.tipoVaoAssociado,
+                    })
+                  }
+                  className="font-mono"
+                />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="lg:sticky lg:top-4 lg:self-start">
+        <Card className="reveal" style={{ animationDelay: "200ms" }}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Layers className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+              Resumo do Orçamento
+            </CardTitle>
+            <CardDescription>
+              {inputs.vaos.length} vão(s) · {resultado.areaTotalVidro.toFixed(2)} m² de vidro
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {resultado.itens.map((item) => (
+              <div key={item.label} className="flex items-start justify-between gap-3 text-sm">
+                <div>
+                  <p className="font-medium text-zinc-800 dark:text-zinc-100">{item.label}</p>
+                  <p className="font-mono text-xs text-zinc-400 dark:text-zinc-500">{item.detalhe}</p>
+                </div>
+                <span className="whitespace-nowrap font-mono font-medium text-zinc-700 dark:text-zinc-300">
+                  {formatBRL(item.subtotal)}
+                </span>
+              </div>
+            ))}
+          </CardContent>
+          <CardFooter className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-900 dark:text-zinc-100">
+              Custo Total
+            </span>
+            <span className="bg-gradient-to-r from-cyan-600 to-teal-600 bg-clip-text font-mono text-xl font-bold text-transparent dark:from-cyan-400 dark:to-teal-300">
+              {formatBRL(resultado.total)}
+            </span>
+          </CardFooter>
+        </Card>
+      </div>
+    </div>
+  );
+}
