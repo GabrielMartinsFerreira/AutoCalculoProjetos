@@ -8,6 +8,7 @@ import type {
   ProductKey,
   ProjectInputs,
   SimplifiedInputs,
+  TipoRT,
   Vao,
   VaoSimples,
 } from "./types";
@@ -408,6 +409,7 @@ const INPUTS_DETALHADO_INICIAL: ProjectInputs = {
   qtdKitPortaSimples: 0,
   qtdKitPortaDupla: 0,
   corVidroSacada: "incolor",
+  tipoRT: "fixo",
   valorRT: 0,
   incluirArtEngenheiro: false,
   qtdCaixaArCondicionado: 0,
@@ -461,6 +463,11 @@ export const useOrcamentoDetalhadoDraft = create<OrcamentoDetalhadoDraftStore>()
 const INPUTS_SIMPLIFICADO_INICIAL: SimplifiedInputs = {
   vaos: [{ id: "vao-simples-1", largura: 1, altura: 2.1 }],
   opcionaisPorModelo: {},
+  tipoRT: "fixo",
+  valorRT: 0,
+  // Sacada não tem cálculo por m² de verdade (valorM2 é placeholder 0) — fica de fora do
+  // comparador por padrão. Usuário pode reativá-la a qualquer momento no Painel de Seleção.
+  modelosDesmarcados: ["sacada"],
 };
 
 interface OrcamentoSimplificadoDraftStore {
@@ -547,7 +554,13 @@ export const useOrcamentoSimplificadoDraft = create<OrcamentoSimplificadoDraftSt
           );
         }
 
-        return { ...current, inputs: { vaos, opcionaisPorModelo } };
+        const tipoRT: TipoRT = raw.tipoRT === "percentual" ? "percentual" : "fixo";
+        const valorRT = typeof raw.valorRT === "number" ? raw.valorRT : 0;
+        const modelosDesmarcados = Array.isArray(raw.modelosDesmarcados)
+          ? (raw.modelosDesmarcados as string[])
+          : INPUTS_SIMPLIFICADO_INICIAL.modelosDesmarcados;
+
+        return { ...current, inputs: { vaos, opcionaisPorModelo, tipoRT, valorRT, modelosDesmarcados } };
       },
     }
   )

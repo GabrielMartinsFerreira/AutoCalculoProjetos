@@ -63,6 +63,13 @@ export function calcularOrcamentoSimplificado(
 
     const custoOpcionaisTotal = custoPelicula + custoLaDeVidro + custoPortaPremium + custoAdicionalNoturno;
 
+    // RT: mesmo sistema fixo/percentual do Detalhado, mas aplicado individualmente sobre
+    // o total (base + opcionais) DESTE modelo — cada card tem sua própria RT em R$,
+    // mesmo compartilhando o mesmo tipo/percentual configurado uma única vez na página.
+    const totalAntesDoRT = custoBase + custoOpcionaisTotal;
+    const custoRT =
+      inputs.tipoRT === "percentual" ? totalAntesDoRT * (inputs.valorRT / 100) : inputs.valorRT;
+
     return {
       modeloId: m.id,
       nomeModelo: m.nome,
@@ -70,7 +77,8 @@ export function calcularOrcamentoSimplificado(
       custoBase,
       opcionais: itensOpcionais,
       custoOpcionaisTotal,
-      total: custoBase + custoOpcionaisTotal,
+      custoRT,
+      total: totalAntesDoRT + custoRT,
     };
   });
 

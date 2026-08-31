@@ -26,6 +26,9 @@ export type ProductKey =
 /** Cor do vidro laminado da Sacada — só usado pelo modelo "sacada" (ver usaCorVidro). */
 export type CorVidroSacada = "incolor" | "verde";
 
+/** Reserva Técnica: valor fixo em R$, ou percentual sobre o total (antes da própria RT). */
+export type TipoRT = "fixo" | "percentual";
+
 export interface Modelo {
   id: string;
   nome: string;
@@ -66,8 +69,10 @@ export interface ProjectInputs {
   qtdKitPortaDupla: number;
   /** Cor do vidro da Sacada — só relevante quando o modelo selecionado usa (ver usaCorVidro). */
   corVidroSacada: CorVidroSacada;
-  /** Reserva Técnica: valor digitado livremente pelo usuário, somado direto ao total. */
+  /** Se "fixo", valorRT é um valor em R$; se "percentual", é uma porcentagem (0-100). */
+  tipoRT: TipoRT;
   valorRT: number;
+  /** Opcionais exclusivos da Sacada — só contam/aparecem quando o modelo é "sacada". */
   incluirArtEngenheiro: boolean;
   qtdCaixaArCondicionado: number;
   /** m² do respiro de alumínio — digitado manualmente, independente da área dos vãos. */
@@ -116,6 +121,17 @@ export interface SimplifiedInputs {
   vaos: VaoSimples[];
   /** Opcionais escolhidos independentemente para cada modelo, chaveado por Modelo.id. */
   opcionaisPorModelo: Record<string, OpcionaisSimplificado>;
+  /** RT é global (um valor/tipo só) e se aplica sobre o total de CADA modelo mostrado. */
+  tipoRT: TipoRT;
+  valorRT: number;
+  /**
+   * Ids de Modelo que o usuário desmarcou no Painel de Seleção (comparador seletivo) —
+   * lista de EXCLUSÃO, não de seleção: um modelo novo (criado depois) aparece
+   * automaticamente, sem precisar atualizar essa lista. "sacada" começa aqui por
+   * padrão (não tem cálculo por m² de verdade — valorM2 é 0), mas o usuário pode
+   * reativá-la a qualquer momento, inclusive sozinha.
+   */
+  modelosDesmarcados: string[];
 }
 
 export interface ResultadoSimplificadoItem {
@@ -125,6 +141,8 @@ export interface ResultadoSimplificadoItem {
   custoBase: number;
   opcionais: CalculoItem[];
   custoOpcionaisTotal: number;
+  /** Reserva Técnica calculada pra este modelo (fixo, ou % sobre custoBase + custoOpcionaisTotal). */
+  custoRT: number;
   total: number;
 }
 

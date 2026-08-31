@@ -214,34 +214,70 @@ no catálogo sem usá-los) — é o mesmo comportamento que já existia antes (e
 sempre teve "Perfil Engenharia" no catálogo mesmo não usando).
 
 ### Ferragens e Opcionais (Detalhado)
-Card reorganizado em 5 subgrupos visuais (`ProjectCalculator.tsx`, componente
-`GrupoFerragens`): **Ferragens** (Puxador H, Fechadura PT Correr), **Kits de Porta**
-(Porta Premium, Kit Porta Simples R$600/un, Kit Porta Dupla R$920/un), **Acabamentos**
-(Película, Lã de Vidro — checkbox + preço editável inline), **Serviços** (Instalação
-Noturna), **Outros** (Reserva Técnica — RT, valor digitado livremente e somado direto ao
-total, sem passar pelo catálogo; Caixa Ar Condicionado R$4.550/un com qtd.; Respiro
-Alumínio R$780/m² com m² digitado manualmente, independente da área dos vãos; ART
-Engenheiro R$450 fixo via checkbox).
+Card em subgrupos visuais (`ProjectCalculator.tsx`, componente `GrupoFerragens`):
+**Ferragens** (Puxador H, Fechadura PT Correr), **Kits de Porta** (Porta Premium, Kit
+Porta Simples R$600/un, Kit Porta Dupla R$920/un), **Acabamentos** (Película, Lã de
+Vidro — checkbox + preço editável inline), **Serviços** (Instalação Noturna),
+**Reserva Técnica (RT)** (sempre visível, qualquer modelo — ver abaixo), e
+**Opcionais da Sacada** (Caixa Ar Condicionado, Respiro Alumínio, ART Engenheiro) —
+esse último grupo **só renderiza quando `modeloSelecionadoId === "sacada"`**, e o
+cálculo espelha isso: `lib/useCalculator.ts` só soma esses 3 itens (e só os inclui em
+`resultado.itens`) dentro do mesmo `if (modeloId === "sacada")`. Pra qualquer outro
+modelo (Slim, MiterGlass, BlindGlass...) esses 3 itens simplesmente não existem no
+orçamento — nem aparecem, nem contam pro total.
 
-**Agrupado vs Separado**: o card "Resumo do Orçamento" tem um toggle (dois botões estilo
-segmented control, igual ao da navegação do `AppHeader`) que troca entre mostrar
-`resultado.itens` corrido (Agrupado, padrão) ou dividido em duas listas por `item.grupo`
-com um subtotal cada — **Subtotal da Divisória** (`resultado.subtotalEstrutural`, soma
-dos itens `grupo: "estrutural"`) e **Subtotal de Opcionais**
-(`resultado.subtotalOpcionais`, soma dos `grupo: "opcional"`) — mais o Total Final
+**Reserva Técnica (RT) — Fixo vs Porcentagem** (`ProjectInputs.tipoRT` +
+`.valorRT`, mesmo par de campos em `SimplifiedInputs`): toggle de dois botões (R$ / %,
+mesmo estilo segmented control da navegação do `AppHeader`) ao lado do input de valor.
+- `tipoRT: "fixo"` → `valorRT` é somado direto ao total, em R$.
+- `tipoRT: "percentual"` → `valorRT` é uma porcentagem (0-100) aplicada sobre o total de
+  tudo mais já somado (**nunca sobre si mesma** — por isso a RT é sempre o **último**
+  item calculado em `calcularOrcamento()`/`calcularOrcamentoSimplificado()`: primeiro
+  soma-se estrutural + todos os outros opcionais, só depois a RT entra em cima desse
+  subtotal).
+- No Detalhado, a RT calculada aparece como um `CalculoItem` normal no Resumo (mostra o
+  valor em R$ mesmo no modo percentual, com o `detalhe` explicando a conta: "X% sobre
+  R$Y") — e também um preview inline ao lado do input quando `tipoRT === "percentual"`,
+  pra não depender só de rolar até o Resumo.
+- No Simplificado, a RT é **configurada uma vez só** (um tipo/valor global pra página
+  inteira, no card "Comparador de Modelos"), mas **calculada individualmente por
+  modelo** — cada card usa o próprio total (`custoBase + custoOpcionaisTotal`) como base
+  do percentual, então o R$ da RT muda de card pra card mesmo com a mesma porcentagem
+  configurada. Isso fica em `ResultadoSimplificadoItem.custoRT` (campo novo, separado de
+  `opcionais`/`custoOpcionaisTotal` porque o card do Simplificado não itera
+  genericamente sobre `opcionais[]` — cada opcional tem sua própria UI curada à mão).
+
+**Agrupado vs Separado** (só Detalhado): o card "Resumo do Orçamento" tem um toggle que
+troca entre mostrar `resultado.itens` corrido (Agrupado, padrão) ou dividido em duas
+listas por `item.grupo` com um subtotal cada — **Subtotal da Divisória**
+(`resultado.subtotalEstrutural`) e **Subtotal de Opcionais**
+(`resultado.subtotalOpcionais`, já inclui a RT) — mais o Total Final
 (`resultado.total`, sempre visível no rodapé do card independente do modo). Esse
 `modoResumo` é estado local do componente (não persiste no Zustand) — reseta pra
 Agrupado a cada F5, de propósito, pra não ser mais uma coisa pra migrar no `merge()`.
+
 **Regra de arredondamento**: todo valor exibido passa por `formatBRL()`
 (`lib/utils.ts`), que já arredonda pra inteiro (`Math.round`, sem centavos) — isso é
-regra de negócio explícita, qualquer novo valor exibido em R$ deve usar essa função, não
-formatar na mão.
+regra de negócio explícita, qualquer novo valor exibido em R$ deve usar essa função
+(inclusive a RT calculada), não formatar na mão. Os valores continuam com casas decimais
+internamente até o momento de exibir — arredondamento é só na exibição, não no cálculo.
 
-### Orçamento Simplificado — opcionais por modelo
+### Orçamento Simplificado — opcionais por modelo + Comparador Seletivo
 Diferente do Detalhado (ferragens globais), aqui cada modelo tem seus próprios opcionais
 independentes (`SimplifiedInputs.opcionaisPorModelo`, chaveado por `modeloId`): Película,
 Lã de Vidro, Porta Premium, Adicional Noturno. Ligar Película no MiterGlass não liga no
 Slim.
+
+**Comparador seletivo**: o Simplificado não mostra mais todos os modelos automaticamente
+— um card "Comparador de Modelos" no topo da página (`SimplifiedCalculator.tsx`) tem um
+painel de chips (um por modelo) que liga/desliga cada um da comparação. Só os
+marcados aparecem na grade de cards abaixo. Implementado como **lista de exclusão**
+(`SimplifiedInputs.modelosDesmarcados: string[]`), não de seleção — um modelo criado
+depois entra automaticamente mostrado, sem precisar atualizar nada. `sacada` começa
+nessa lista por padrão (fica desmarcada), porque não tem cálculo por m² de verdade
+(`valorM2` é `0`) — o usuário pode reativá-la a qualquer momento, inclusive sozinha
+(desmarcando todo o resto), pra orçá-la "solo" sem poluir a comparação — isso já é
+comportamento natural de chips independentes, não precisou de um modo "solo" à parte.
 
 ## 5. Persistência de Dados
 
@@ -383,27 +419,46 @@ importantes:
 ## 9. Pendências Conhecidas
 
 - Sem fluxo de "esqueci minha senha" na UI (reset é manual, pelo painel do Supabase).
-- Nenhum dos opcionais/campos exclusivos do Detalhado tem equivalente no Simplificado —
-  Kits de Porta, RT, ART Engenheiro, Caixa Ar Condicionado, Respiro Alumínio, e a própria
-  Sacada (Simplificado só tem Película/Lã de Vidro/Porta Premium/Adicional Noturno por
-  modelo). Não foi pedido ainda, mas é uma assimetria a considerar se pedirem.
+- Kits de Porta e os opcionais exclusivos da Sacada (ART, Caixa AC, Respiro) só existem
+  no Detalhado — RT já foi estendida pros dois (ver seção 4). Não foi pedido estender o
+  resto ainda, mas é uma assimetria a considerar se pedirem.
 - `valorM2` da Sacada está com placeholder `0` — não é um preço real, só existe porque
-  todo `Modelo` precisa desse campo. Se for usar Sacada no Simplificado, precisa de um
-  valor de verdade lá (ou repensar se a Sacada faz sentido nessa tela — a lógica dela é
-  bem diferente de "preço fechado por m²").
+  todo `Modelo` precisa desse campo. Ela fica desmarcada por padrão no Comparador do
+  Simplificado por causa disso (ver seção 4), mas se o usuário reativá-la lá, o card dela
+  vai mostrar "Base: R$0" até alguém colocar um valorM2 de verdade em Modelos.
 - `supabase/migration_002_vendedor_codigo.sql` precisa ter sido rodada manualmente pelo
   usuário no Supabase pra "Meus Orçamentos" funcionar (colunas `codigo`/`nome_vendedor`).
-- **Sacada, RT, toggle Agrupado/Separado e os novos opcionais (Passo 1-3 de
-  2026-08-28) foram validados por `tsc`/`eslint`/`build` e um teste isolado da lógica de
-  combinação de kits — mas NÃO foram verificados na UI renderizada, porque o sistema
-  agora exige login (ver seção 6) e não existe conta criada ainda. Testar na tela assim
-  que houver uma conta.**
+- **Nada que envolve renderização de tela foi verificado ao vivo desde que o login virou
+  obrigatório** (Sacada, toggle Agrupado/Separado, isolamento dos opcionais da Sacada, RT
+  fixo/percentual nas duas calculadoras, Comparador Seletivo do Simplificado — tudo dos
+  últimos commits). Só dá pra validar por `tsc`/`eslint`/`build` (limpos) e testes
+  isolados da lógica pura (kits da Sacada, RT fixo/percentual — ambos batendo). Testar de
+  verdade na tela assim que existir uma conta.
 
 ## 10. Histórico de Mudanças
 
 > Entradas resumidas, mais recente primeiro. Não precisa repetir o que já está descrito
 > nas seções acima — só registrar o quê e (se não-óbvio) o porquê.
 
+- **2026-08-28** — Isolamento dos opcionais da Sacada, RT Fixo/Porcentagem, e
+  Comparador Seletivo no Simplificado:
+  - ART Engenheiro, Caixa Ar Condicionado e Respiro Alumínio agora só aparecem e só
+    contam quando `modeloId === "sacada"` — antes eram universais (apareciam pra
+    qualquer modelo). Ver `lib/useCalculator.ts` e o grupo condicional em
+    `ProjectCalculator.tsx`.
+  - RT ganhou um segundo modo: `ProjectInputs.tipoRT`/`SimplifiedInputs.tipoRT`
+    (`"fixo" | "percentual"`). Em modo percentual, o valor é uma % aplicada sobre o
+    total de tudo mais já somado — por isso a RT é sempre o último item calculado nas
+    duas calculadoras (nunca incide sobre si mesma). Estendida pro Simplificado
+    também: configuração global (um tipo/valor pra página), mas calculada por modelo
+    (`ResultadoSimplificadoItem.custoRT`, novo campo).
+  - Simplificado deixou de mostrar todos os modelos automaticamente: novo card
+    "Comparador de Modelos" no topo com chips liga/desliga por modelo
+    (`SimplifiedInputs.modelosDesmarcados`, lista de exclusão). Sacada começa
+    desmarcada por padrão (não tem `valorM2` de verdade).
+  - Validado por `tsc`/`eslint`/`build` + teste isolado da matemática de RT (fixo e
+    percentual, incluindo casos com resultado quebrado tipo R$62,50, pra confirmar que
+    só arredonda na exibição). Não verificado na UI (ver Pendências).
 - **2026-08-28** — Novo modelo/estratégia **Sacada** (`lib/calculators/sacada.ts`):
   vidro por m² com cor (Incolor R$780 / Verde R$930) + kit por largura do vão, com
   combinação gulosa de kits acima de 6m (ver seção 4). Novo campo **RT (Reserva

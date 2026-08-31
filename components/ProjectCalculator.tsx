@@ -73,6 +73,7 @@ export function ProjectCalculator() {
 
   const itensEstruturais = resultado.itens.filter((i) => i.grupo === "estrutural");
   const itensOpcionais = resultado.itens.filter((i) => i.grupo === "opcional");
+  const itemRT = resultado.itens.find((i) => i.label === "Reserva Técnica (RT)");
 
   function novoOrcamento() {
     if (!confirm("Começar um novo orçamento? Os dados atuais serão apagados.")) return;
@@ -293,10 +294,39 @@ export function ProjectCalculator() {
               </div>
             </GrupoFerragens>
 
-            <GrupoFerragens titulo="Outros">
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <GrupoFerragens titulo="Reserva Técnica (RT)">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div className="flex flex-col gap-1">
-                  <Label>Reserva Técnica — RT (R$)</Label>
+                  <Label>Tipo</Label>
+                  <div className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-zinc-100/80 p-1 dark:border-zinc-800 dark:bg-zinc-900/60">
+                    <button
+                      type="button"
+                      onClick={() => setInputs({ ...inputs, tipoRT: "fixo" })}
+                      className={cn(
+                        "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                        inputs.tipoRT === "fixo"
+                          ? "bg-white text-cyan-700 shadow-sm dark:bg-zinc-800 dark:text-cyan-300"
+                          : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
+                      )}
+                    >
+                      R$
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInputs({ ...inputs, tipoRT: "percentual" })}
+                      className={cn(
+                        "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                        inputs.tipoRT === "percentual"
+                          ? "bg-white text-cyan-700 shadow-sm dark:bg-zinc-800 dark:text-cyan-300"
+                          : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
+                      )}
+                    >
+                      %
+                    </button>
+                  </div>
+                </div>
+                <div className="flex flex-1 flex-col gap-1">
+                  <Label>{inputs.tipoRT === "percentual" ? "Percentual da RT (%)" : "Valor da RT (R$)"}</Label>
                   <Input
                     type="number"
                     step="0.01"
@@ -306,36 +336,51 @@ export function ProjectCalculator() {
                     className="font-mono"
                   />
                 </div>
-                <div className="flex flex-col gap-1">
-                  <Label>Caixa Ar Condicionado (qtd.)</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={inputs.qtdCaixaArCondicionado}
-                    onChange={(e) => setInputs({ ...inputs, qtdCaixaArCondicionado: Number(e.target.value) })}
-                    className="font-mono"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Label>Respiro Alumínio (m²)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min={0}
-                    value={inputs.m2RespiroAluminio}
-                    onChange={(e) => setInputs({ ...inputs, m2RespiroAluminio: Number(e.target.value) })}
-                    className="font-mono"
-                  />
-                </div>
-                <label className="flex items-center gap-2 pt-5">
-                  <Checkbox
-                    checked={inputs.incluirArtEngenheiro}
-                    onChange={(e) => setInputs({ ...inputs, incluirArtEngenheiro: e.target.checked })}
-                  />
-                  <span className="text-sm text-zinc-700 dark:text-zinc-300">Incluir ART Engenheiro</span>
-                </label>
+                {inputs.tipoRT === "percentual" && (
+                  <div className="flex flex-col gap-1">
+                    <Label>RT calculada</Label>
+                    <p className="flex h-9 items-center font-mono text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                      {formatBRL(itemRT?.subtotal ?? 0)}
+                    </p>
+                  </div>
+                )}
               </div>
             </GrupoFerragens>
+
+            {modeloSelecionadoId === "sacada" && (
+              <GrupoFerragens titulo="Opcionais da Sacada">
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                  <div className="flex flex-col gap-1">
+                    <Label>Caixa Ar Condicionado (qtd.)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={inputs.qtdCaixaArCondicionado}
+                      onChange={(e) => setInputs({ ...inputs, qtdCaixaArCondicionado: Number(e.target.value) })}
+                      className="font-mono"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label>Respiro Alumínio (m²)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      value={inputs.m2RespiroAluminio}
+                      onChange={(e) => setInputs({ ...inputs, m2RespiroAluminio: Number(e.target.value) })}
+                      className="font-mono"
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 pt-5">
+                    <Checkbox
+                      checked={inputs.incluirArtEngenheiro}
+                      onChange={(e) => setInputs({ ...inputs, incluirArtEngenheiro: e.target.checked })}
+                    />
+                    <span className="text-sm text-zinc-700 dark:text-zinc-300">Incluir ART Engenheiro</span>
+                  </label>
+                </div>
+              </GrupoFerragens>
+            )}
           </CardContent>
         </Card>
       </div>

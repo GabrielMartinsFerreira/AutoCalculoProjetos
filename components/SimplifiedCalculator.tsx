@@ -1,20 +1,33 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, RotateCcw, Save } from "lucide-react";
+import { Check, Plus, RotateCcw, Save } from "lucide-react";
 import { useOrcamentoSimplificadoDraft, useProductStore } from "@/lib/store";
 import { useSimplifiedCalculator } from "@/lib/useSimplifiedCalculator";
 import { OPCIONAIS_PADRAO } from "@/lib/types";
-import { formatBRL } from "@/lib/utils";
+import { cn, formatBRL } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { VaoSimplesRow } from "@/components/VaoSimplesRow";
 import { SalvarOrcamentoDialog, type DadosSalvarOrcamento } from "@/components/SalvarOrcamentoDialog";
 
+function SecaoComparador({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <div className="border-t border-zinc-100 pt-4 first:border-t-0 first:pt-0 dark:border-zinc-800">
+      <p className="mb-2 font-mono text-[0.65rem] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+        {titulo}
+      </p>
+      {children}
+    </div>
+  );
+}
+
 export function SimplifiedCalculator() {
   const inputs = useOrcamentoSimplificadoDraft((s) => s.inputs);
+  const setInputs = useOrcamentoSimplificadoDraft((s) => s.setInputs);
   const addVao = useOrcamentoSimplificadoDraft((s) => s.addVao);
   const updateVao = useOrcamentoSimplificadoDraft((s) => s.updateVao);
   const removeVao = useOrcamentoSimplificadoDraft((s) => s.removeVao);
@@ -26,6 +39,12 @@ export function SimplifiedCalculator() {
   const updateProduct = useProductStore((s) => s.updateProduct);
 
   const [mostrarSalvar, setMostrarSalvar] = useState(false);
+
+  // Comparador seletivo: só os modelos NÃO marcados como desmarcados aparecem lado a
+  // lado. Lista de exclusão (não de seleção) — um modelo novo entra automaticamente.
+  const modelosAtivos = resultado.porModelo.filter(
+    (item) => !inputs.modelosDesmarcados.includes(item.modeloId)
+  );
 
   function novoOrcamento() {
     if (!confirm("Começar um novo orçamento simplificado? Os dados atuais serão apagados.")) return;
@@ -50,8 +69,105 @@ export function SimplifiedCalculator() {
     }
   }
 
+  function alternarModelo(modeloId: string) {
+    const estaDesmarcado = inputs.modelosDesmarcados.includes(modeloId);
+    setInputs({
+      ...inputs,
+      modelosDesmarcados: estaDesmarcado
+        ? inputs.modelosDesmarcados.filter((id) => id !== modeloId)
+        : [...inputs.modelosDesmarcados, modeloId],
+    });
+  }
+
   return (
     <div className="flex flex-col gap-5">
+      <Card className="reveal" style={{ animationDelay: "40ms" }}>
+        <CardHeader>
+          <CardTitle>Comparador de Modelos</CardTitle>
+          <CardDescription>
+            Escolha quais modelos entram na comparação e configure a Reserva Técnica
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <SecaoComparador titulo="Modelos a comparar">
+            <div className="flex flex-wrap gap-2">
+              {resultado.porModelo.map((item) => {
+                const ativo = !inputs.modelosDesmarcados.includes(item.modeloId);
+                return (
+                  <button
+                    key={item.modeloId}
+                    type="button"
+                    onClick={() => alternarModelo(item.modeloId)}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
+                      ativo
+                        ? "border-cyan-500 bg-cyan-50 text-cyan-700 dark:border-cyan-400 dark:bg-cyan-950/40 dark:text-cyan-300"
+                        : "border-zinc-300 bg-white text-zinc-500 hover:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-400"
+                    )}
+                  >
+                    {ativo && <Check className="h-3.5 w-3.5" />}
+                    {item.nomeModelo}
+                  </button>
+                );
+              })}
+              {resultado.porModelo.length === 0 && (
+                <p className="text-sm text-zinc-400 dark:text-zinc-500">Nenhum modelo cadastrado.</p>
+              )}
+            </div>
+          </SecaoComparador>
+
+          <SecaoComparador titulo="Reserva Técnica (RT)">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="flex flex-col gap-1">
+                <Label>Tipo</Label>
+                <div className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-zinc-100/80 p-1 dark:border-zinc-800 dark:bg-zinc-900/60">
+                  <button
+                    type="button"
+                    onClick={() => setInputs({ ...inputs, tipoRT: "fixo" })}
+                    className={cn(
+                      "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                      inputs.tipoRT === "fixo"
+                        ? "bg-white text-cyan-700 shadow-sm dark:bg-zinc-800 dark:text-cyan-300"
+                        : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
+                    )}
+                  >
+                    R$
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInputs({ ...inputs, tipoRT: "percentual" })}
+                    className={cn(
+                      "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                      inputs.tipoRT === "percentual"
+                        ? "bg-white text-cyan-700 shadow-sm dark:bg-zinc-800 dark:text-cyan-300"
+                        : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
+                    )}
+                  >
+                    %
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-1 flex-col gap-1 sm:max-w-[220px]">
+                <Label>{inputs.tipoRT === "percentual" ? "Percentual da RT (%)" : "Valor da RT (R$)"}</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  value={inputs.valorRT}
+                  onChange={(e) => setInputs({ ...inputs, valorRT: Number(e.target.value) })}
+                  className="font-mono"
+                />
+              </div>
+              <p className="text-xs text-zinc-400 sm:pb-2 dark:text-zinc-500">
+                {inputs.tipoRT === "percentual"
+                  ? "Aplicada sobre o total de cada modelo mostrado abaixo."
+                  : "Somada ao total de cada modelo mostrado abaixo."}
+              </p>
+            </div>
+          </SecaoComparador>
+        </CardContent>
+      </Card>
+
       <Card className="reveal" style={{ animationDelay: "120ms" }}>
         <CardHeader className="flex-row items-center justify-between">
           <div>
@@ -98,7 +214,7 @@ export function SimplifiedCalculator() {
           Cada modelo tem seus próprios opcionais — escolha livremente o que entra em cada um
         </p>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {resultado.porModelo.map((item, i) => {
+          {modelosAtivos.map((item, i) => {
             const opcionais = inputs.opcionaisPorModelo[item.modeloId] ?? OPCIONAIS_PADRAO;
             const produtosModelo = productsByModelo[item.modeloId] ?? [];
             const pelicula = produtosModelo.find((p) => p.key === "pelicula");
@@ -258,6 +374,12 @@ export function SimplifiedCalculator() {
                       <span className="font-mono">{formatBRL(item.custoOpcionaisTotal)}</span>
                     </div>
                   )}
+                  {item.custoRT > 0 && (
+                    <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
+                      <span>Reserva Técnica (RT)</span>
+                      <span className="font-mono">{formatBRL(item.custoRT)}</span>
+                    </div>
+                  )}
                 </CardContent>
                 <CardFooter className="flex items-center justify-between">
                   <span className="text-xs font-semibold uppercase tracking-wider text-zinc-900 dark:text-zinc-100">
@@ -270,9 +392,9 @@ export function SimplifiedCalculator() {
               </Card>
             );
           })}
-          {resultado.porModelo.length === 0 && (
+          {modelosAtivos.length === 0 && (
             <p className="col-span-full py-6 text-center text-sm text-zinc-400 dark:text-zinc-500">
-              Nenhum modelo cadastrado. Adicione um modelo acima.
+              Nenhum modelo selecionado pra comparar. Marque pelo menos um no painel acima.
             </p>
           )}
         </div>
