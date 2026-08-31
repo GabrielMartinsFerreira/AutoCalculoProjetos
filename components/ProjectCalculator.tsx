@@ -5,14 +5,16 @@ import { RotateCcw, Plus, Layers, Save } from "lucide-react";
 import { useCalculator } from "@/lib/useCalculator";
 import { obterEstrategia } from "@/lib/calculators";
 import { EMPTY_PRODUCTS, useModeloStore, useOrcamentoDetalhadoDraft, useProductStore } from "@/lib/store";
-import { formatBRL } from "@/lib/utils";
+import { cn, formatBRL } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select } from "@/components/ui/select";
 import { VaoRow } from "@/components/VaoRow";
 import { SalvarOrcamentoDialog, type DadosSalvarOrcamento } from "@/components/SalvarOrcamentoDialog";
+import type { CalculoItem } from "@/lib/types";
 
 function GrupoFerragens({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
@@ -24,6 +26,22 @@ function GrupoFerragens({ titulo, children }: { titulo: string; children: React.
     </div>
   );
 }
+
+function LinhaItem({ item }: { item: CalculoItem }) {
+  return (
+    <div className="flex items-start justify-between gap-3 text-sm">
+      <div>
+        <p className="font-medium text-zinc-800 dark:text-zinc-100">{item.label}</p>
+        <p className="font-mono text-xs text-zinc-400 dark:text-zinc-500">{item.detalhe}</p>
+      </div>
+      <span className="whitespace-nowrap font-mono font-medium text-zinc-700 dark:text-zinc-300">
+        {formatBRL(item.subtotal)}
+      </span>
+    </div>
+  );
+}
+
+type ModoResumo = "agrupado" | "separado";
 
 export function ProjectCalculator() {
   const inputs = useOrcamentoDetalhadoDraft((s) => s.inputs);
@@ -51,6 +69,10 @@ export function ProjectCalculator() {
   );
 
   const [mostrarSalvar, setMostrarSalvar] = useState(false);
+  const [modoResumo, setModoResumo] = useState<ModoResumo>("agrupado");
+
+  const itensEstruturais = resultado.itens.filter((i) => i.grupo === "estrutural");
+  const itensOpcionais = resultado.itens.filter((i) => i.grupo === "opcional");
 
   function novoOrcamento() {
     if (!confirm("Começar um novo orçamento? Os dados atuais serão apagados.")) return;
@@ -85,6 +107,19 @@ export function ProjectCalculator() {
               <CardDescription>Adicione cada vão do projeto com sua largura, altura e tipo</CardDescription>
             </div>
             <div className="flex items-center gap-2">
+              {estrategia.usaCorVidro && (
+                <Select
+                  value={inputs.corVidroSacada}
+                  onChange={(e) =>
+                    setInputs({ ...inputs, corVidroSacada: e.target.value as "incolor" | "verde" })
+                  }
+                  className="!h-8 w-40 text-xs"
+                  title="Cor do vidro da Sacada"
+                >
+                  <option value="incolor">Vidro Incolor</option>
+                  <option value="verde">Vidro Verde</option>
+                </Select>
+              )}
               <Button size="sm" variant="outline" onClick={novoOrcamento} title="Limpar tudo e começar um orçamento novo">
                 <RotateCcw className="h-4 w-4" />
                 Novo Orçamento
@@ -257,33 +292,122 @@ export function ProjectCalculator() {
                 </div>
               </div>
             </GrupoFerragens>
+
+            <GrupoFerragens titulo="Outros">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <div className="flex flex-col gap-1">
+                  <Label>Reserva Técnica — RT (R$)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={inputs.valorRT}
+                    onChange={(e) => setInputs({ ...inputs, valorRT: Number(e.target.value) })}
+                    className="font-mono"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label>Caixa Ar Condicionado (qtd.)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={inputs.qtdCaixaArCondicionado}
+                    onChange={(e) => setInputs({ ...inputs, qtdCaixaArCondicionado: Number(e.target.value) })}
+                    className="font-mono"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label>Respiro Alumínio (m²)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={inputs.m2RespiroAluminio}
+                    onChange={(e) => setInputs({ ...inputs, m2RespiroAluminio: Number(e.target.value) })}
+                    className="font-mono"
+                  />
+                </div>
+                <label className="flex items-center gap-2 pt-5">
+                  <Checkbox
+                    checked={inputs.incluirArtEngenheiro}
+                    onChange={(e) => setInputs({ ...inputs, incluirArtEngenheiro: e.target.checked })}
+                  />
+                  <span className="text-sm text-zinc-700 dark:text-zinc-300">Incluir ART Engenheiro</span>
+                </label>
+              </div>
+            </GrupoFerragens>
           </CardContent>
         </Card>
       </div>
 
       <div className="lg:sticky lg:top-4 lg:self-start">
         <Card className="reveal" style={{ animationDelay: "200ms" }}>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Layers className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
-              Resumo do Orçamento
-            </CardTitle>
-            <CardDescription>
-              {inputs.vaos.length} vão(s) · {resultado.areaTotalVidro.toFixed(2)} m² de vidro
-            </CardDescription>
+          <CardHeader className="flex-row items-start justify-between gap-3">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Layers className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                Resumo do Orçamento
+              </CardTitle>
+              <CardDescription>
+                {inputs.vaos.length} vão(s) · {resultado.areaTotalVidro.toFixed(2)} m² de vidro
+              </CardDescription>
+            </div>
+            <div className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-zinc-200 bg-zinc-100/80 p-1 text-[0.7rem] dark:border-zinc-800 dark:bg-zinc-900/60">
+              <button
+                type="button"
+                onClick={() => setModoResumo("agrupado")}
+                className={cn(
+                  "rounded-md px-2 py-1 font-medium transition-colors",
+                  modoResumo === "agrupado"
+                    ? "bg-white text-cyan-700 shadow-sm dark:bg-zinc-800 dark:text-cyan-300"
+                    : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
+                )}
+              >
+                Agrupado
+              </button>
+              <button
+                type="button"
+                onClick={() => setModoResumo("separado")}
+                className={cn(
+                  "rounded-md px-2 py-1 font-medium transition-colors",
+                  modoResumo === "separado"
+                    ? "bg-white text-cyan-700 shadow-sm dark:bg-zinc-800 dark:text-cyan-300"
+                    : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
+                )}
+              >
+                Separado
+              </button>
+            </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            {resultado.itens.map((item) => (
-              <div key={item.label} className="flex items-start justify-between gap-3 text-sm">
-                <div>
-                  <p className="font-medium text-zinc-800 dark:text-zinc-100">{item.label}</p>
-                  <p className="font-mono text-xs text-zinc-400 dark:text-zinc-500">{item.detalhe}</p>
+            {modoResumo === "agrupado" ? (
+              resultado.itens.map((item) => <LinhaItem key={item.label} item={item} />)
+            ) : (
+              <>
+                <div className="flex flex-col gap-3">
+                  {itensEstruturais.map((item) => (
+                    <LinhaItem key={item.label} item={item} />
+                  ))}
+                  <div className="flex items-center justify-between border-t border-zinc-100 pt-2 text-sm dark:border-zinc-800">
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-100">Subtotal da Divisória</span>
+                    <span className="font-mono font-semibold text-zinc-800 dark:text-zinc-100">
+                      {formatBRL(resultado.subtotalEstrutural)}
+                    </span>
+                  </div>
                 </div>
-                <span className="whitespace-nowrap font-mono font-medium text-zinc-700 dark:text-zinc-300">
-                  {formatBRL(item.subtotal)}
-                </span>
-              </div>
-            ))}
+                <div className="flex flex-col gap-3 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+                  {itensOpcionais.map((item) => (
+                    <LinhaItem key={item.label} item={item} />
+                  ))}
+                  <div className="flex items-center justify-between border-t border-zinc-100 pt-2 text-sm dark:border-zinc-800">
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-100">Subtotal de Opcionais</span>
+                    <span className="font-mono font-semibold text-zinc-800 dark:text-zinc-100">
+                      {formatBRL(resultado.subtotalOpcionais)}
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
             <Button variant="outline" className="mt-1 w-full" onClick={() => setMostrarSalvar(true)}>
               <Save className="h-4 w-4" />
               Salvar Orçamento
@@ -291,7 +415,7 @@ export function ProjectCalculator() {
           </CardContent>
           <CardFooter className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-zinc-900 dark:text-zinc-100">
-              Custo Total
+              {modoResumo === "separado" ? "Total Final" : "Custo Total"}
             </span>
             <span className="bg-gradient-to-r from-cyan-600 to-teal-600 bg-clip-text font-mono text-xl font-bold text-transparent dark:from-cyan-400 dark:to-teal-300">
               {formatBRL(resultado.total)}

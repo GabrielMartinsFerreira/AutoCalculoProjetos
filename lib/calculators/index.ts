@@ -1,5 +1,6 @@
 import { estrategiaSlim } from "./slim";
 import { estrategiaMiterGlass } from "./miterglass";
+import { estrategiaSacada } from "./sacada";
 import type { EstrategiaCalculoModelo } from "./types";
 
 export type { EstrategiaCalculoModelo, GetValor } from "./types";
@@ -10,6 +11,7 @@ const ESTRATEGIAS: Record<string, EstrategiaCalculoModelo> = {
   // e os valores do catálogo, não a fórmula.
   slim8mm: estrategiaSlim,
   miterglass: estrategiaMiterGlass,
+  sacada: estrategiaSacada,
 };
 
 /**

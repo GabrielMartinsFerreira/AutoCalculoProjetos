@@ -12,7 +12,7 @@ import type {
   VaoSimples,
 } from "./types";
 
-const SEED_MODELO_IDS = ["slim", "slim8mm", "miterglass", "blindglass"];
+const SEED_MODELO_IDS = ["slim", "slim8mm", "miterglass", "blindglass", "sacada"];
 
 /**
  * Referência estável para "nenhum produto ainda". Nunca crie `[]` inline dentro de
@@ -112,6 +112,78 @@ const SEED_PRODUCTS: Product[] = [
     valor: 920,
     tipoVaoAssociado: null,
   },
+  {
+    id: "vidroSacadaIncolor",
+    key: "vidroSacadaIncolor",
+    nome: "Vidro Laminado 10mm INCOLOR (Sacada)",
+    unidade: "m²",
+    valor: 780,
+    tipoVaoAssociado: null,
+  },
+  {
+    id: "vidroSacadaVerde",
+    key: "vidroSacadaVerde",
+    nome: "Vidro Laminado 10mm VERDE (Sacada)",
+    unidade: "m²",
+    valor: 930,
+    tipoVaoAssociado: null,
+  },
+  {
+    id: "kitSacada2m",
+    key: "kitSacada2m",
+    nome: "Kit Sacada até 2m",
+    unidade: "un",
+    valor: 2080,
+    tipoVaoAssociado: null,
+  },
+  {
+    id: "kitSacada3m",
+    key: "kitSacada3m",
+    nome: "Kit Sacada até 3m",
+    unidade: "un",
+    valor: 2990,
+    tipoVaoAssociado: null,
+  },
+  {
+    id: "kitSacada4m",
+    key: "kitSacada4m",
+    nome: "Kit Sacada até 4m",
+    unidade: "un",
+    valor: 3900,
+    tipoVaoAssociado: null,
+  },
+  {
+    id: "kitSacada6m",
+    key: "kitSacada6m",
+    nome: "Kit Sacada até 6m",
+    unidade: "un",
+    valor: 5460,
+    tipoVaoAssociado: null,
+  },
+  {
+    id: "artEngenheiro",
+    key: "artEngenheiro",
+    nome: "ART Engenheiro (Opcional)",
+    unidade: "un",
+    valor: 450,
+    tipoVaoAssociado: null,
+  },
+  {
+    id: "caixaArCondicionado",
+    key: "caixaArCondicionado",
+    nome: "Caixa Ar Condicionado (Opcional)",
+    unidade: "un",
+    valor: 4550,
+    tipoVaoAssociado: null,
+  },
+  {
+    id: "respiroAluminio",
+    key: "respiroAluminio",
+    nome: "Respiro Alumínio (Opcional)",
+    unidade: "m²",
+    valor: 780,
+    tipoVaoAssociado: null,
+  },
 ];
 
 /**
@@ -120,7 +192,19 @@ const SEED_PRODUCTS: Product[] = [
  * existente (não só nos modelos novos), senão o item nunca aparece pra quem já
  * tinha dados persistidos.
  */
-const CHAVES_NOVAS_RETROATIVAS: ProductKey[] = ["kitPortaSimples", "kitPortaDupla"];
+const CHAVES_NOVAS_RETROATIVAS: ProductKey[] = [
+  "kitPortaSimples",
+  "kitPortaDupla",
+  "vidroSacadaIncolor",
+  "vidroSacadaVerde",
+  "kitSacada2m",
+  "kitSacada3m",
+  "kitSacada4m",
+  "kitSacada6m",
+  "artEngenheiro",
+  "caixaArCondicionado",
+  "respiroAluminio",
+];
 
 /**
  * Catálogo de produtos independente por modelo: cada Modelo.id tem sua própria
@@ -243,6 +327,10 @@ const SEED_MODELOS: Modelo[] = [
   { id: "slim8mm", nome: "Divisória Slim 8mm", valorM2: 950 },
   { id: "miterglass", nome: "Divisória MiterGlass", valorM2: 1270 },
   { id: "blindglass", nome: "Divisória BlindGlass", valorM2: 2185 },
+  // valorM2 é só um placeholder — a Sacada não é precificada por m² fechado (vidro por
+  // cor + kit por largura, ver lib/calculators/sacada.ts), então esse número praticamente
+  // não se aplica no Simplificado. Ajuste manual em Modelos se for usar a Sacada lá.
+  { id: "sacada", nome: "Sacada", valorM2: 0 },
 ];
 
 interface ModeloStore {
@@ -319,6 +407,11 @@ const INPUTS_DETALHADO_INICIAL: ProjectInputs = {
   qtdNoitesInstalacao: 0,
   qtdKitPortaSimples: 0,
   qtdKitPortaDupla: 0,
+  corVidroSacada: "incolor",
+  valorRT: 0,
+  incluirArtEngenheiro: false,
+  qtdCaixaArCondicionado: 0,
+  m2RespiroAluminio: 0,
 };
 
 interface OrcamentoDetalhadoDraftStore {

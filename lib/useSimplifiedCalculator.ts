@@ -39,21 +39,25 @@ export function calcularOrcamentoSimplificado(
         label: "Película",
         detalhe: opcionais.incluirPelicula ? `${area.toFixed(2)} m²` : "Não incluída",
         subtotal: custoPelicula,
+        grupo: "opcional",
       },
       {
         label: "Lã de Vidro",
         detalhe: opcionais.incluirLaDeVidro ? `${area.toFixed(2)} m²` : "Não incluída",
         subtotal: custoLaDeVidro,
+        grupo: "opcional",
       },
       {
         label: "Porta Premium",
         detalhe: `${opcionais.qtdPortaPremium} un`,
         subtotal: custoPortaPremium,
+        grupo: "opcional",
       },
       {
         label: "Adicional Noturno",
         detalhe: `${opcionais.qtdNoitesInstalacao} noite(s)`,
         subtotal: custoAdicionalNoturno,
+        grupo: "opcional",
       },
     ];
 

@@ -12,7 +12,19 @@ export type ProductKey =
   | "portaPremium"
   | "laDeVidro"
   | "kitPortaSimples"
-  | "kitPortaDupla";
+  | "kitPortaDupla"
+  | "vidroSacadaIncolor"
+  | "vidroSacadaVerde"
+  | "kitSacada2m"
+  | "kitSacada3m"
+  | "kitSacada4m"
+  | "kitSacada6m"
+  | "artEngenheiro"
+  | "caixaArCondicionado"
+  | "respiroAluminio";
+
+/** Cor do vidro laminado da Sacada — só usado pelo modelo "sacada" (ver usaCorVidro). */
+export type CorVidroSacada = "incolor" | "verde";
 
 export interface Modelo {
   id: string;
@@ -52,18 +64,32 @@ export interface ProjectInputs {
   qtdNoitesInstalacao: number;
   qtdKitPortaSimples: number;
   qtdKitPortaDupla: number;
+  /** Cor do vidro da Sacada — só relevante quando o modelo selecionado usa (ver usaCorVidro). */
+  corVidroSacada: CorVidroSacada;
+  /** Reserva Técnica: valor digitado livremente pelo usuário, somado direto ao total. */
+  valorRT: number;
+  incluirArtEngenheiro: boolean;
+  qtdCaixaArCondicionado: number;
+  /** m² do respiro de alumínio — digitado manualmente, independente da área dos vãos. */
+  m2RespiroAluminio: number;
 }
 
 export interface CalculoItem {
   label: string;
   detalhe: string;
   subtotal: number;
+  /** "estrutural" = vidro/perfis/tubos (vem da Strategy do modelo); "opcional" = tudo somado depois. */
+  grupo: "estrutural" | "opcional";
 }
 
 export interface ResultadoCalculo {
   itens: CalculoItem[];
   total: number;
   areaTotalVidro: number;
+  /** Soma de itens com grupo "estrutural" — "Subtotal da Divisória" na UI. */
+  subtotalEstrutural: number;
+  /** Soma de itens com grupo "opcional" — "Subtotal de Opcionais" na UI. */
+  subtotalOpcionais: number;
 }
 
 export interface VaoSimples {

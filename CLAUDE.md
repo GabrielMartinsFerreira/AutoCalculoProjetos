@@ -93,6 +93,7 @@ lib/
     types.ts                    Interface EstrategiaCalculoModelo
     slim.ts                     Fórmula Slim (10mm e 8mm — mesma fórmula, catálogo separado)
     miterglass.ts                Fórmula MiterGlass (modulada em peças de ~1m)
+    sacada.ts                    Fórmula Sacada (vidro por cor + kit combinado por largura)
     index.ts                     obterEstrategia(modeloId) — fallback pra Slim se não mapeado
   dal.ts                        getUsuarioLogado() — única fonte de verdade sobre sessão
                                 no servidor (cache() do React, usa getUser() não getSession())
@@ -123,7 +124,7 @@ Um módulo/abertura da divisória: `largura`, `altura`, e (no Detalhado) um `tip
 contribui pra área de vidro e pro cálculo estrutural. O Simplificado usa `VaoSimples`
 (só largura/altura, sem tipo — o preço é por m² fechado, não importa o tipo).
 
-### Modelo (Divisória Slim / Slim 8mm / MiterGlass / BlindGlass)
+### Modelo (Divisória Slim / Slim 8mm / MiterGlass / BlindGlass / Sacada)
 Cada modelo tem:
 - Sua **própria fórmula estrutural** (Strategy pattern, `lib/calculators/`) — como
   vidro/perfis/tubos são calculados a partir dos vãos.
@@ -131,23 +132,37 @@ Cada modelo tem:
   (`useProductStore.productsByModelo[modeloId]`). Editar o preço da fechadura no Slim
   NUNCA afeta o preço da fechadura no MiterGlass. Um modelo novo criado pelo usuário
   nasce com catálogo vazio.
-- Seu **valorM2** (usado só no Simplificado).
+- Seu **valorM2** (usado só no Simplificado — a Sacada tem isso como placeholder `0`,
+  já que não é precificada por m² fechado, ver seção "Sacada" abaixo).
 
 Modelos-semente (`SEED_MODELO_IDS` em `lib/store.ts`): `slim`, `slim8mm`, `miterglass`,
-`blindglass`. Usuário pode criar modelos novos livremente (`ModeloCatalog.tsx`) — esses
-caem na estratégia de cálculo da Slim por padrão (`obterEstrategia` faz fallback), até
-ganharem fórmula própria.
+`blindglass`, `sacada`. Usuário pode criar modelos novos livremente (`ModeloCatalog.tsx`)
+— esses caem na estratégia de cálculo da Slim por padrão (`obterEstrategia` faz
+fallback), até ganharem fórmula própria. **Importante**: pra uma estratégia nova ficar
+de fato vinculada a um modelo, o `id` do modelo tem que bater literalmente com a chave
+usada em `ESTRATEGIAS` (`lib/calculators/index.ts`) — um modelo criado manualmente pela
+UI ganha um `crypto.randomUUID()` como id, então nunca vai casar sozinho com uma
+estratégia nova. É por isso que a Sacada foi adicionada como modelo-semente (id fixo
+`"sacada"`), não como algo que o usuário criaria à mão.
 
 ### Estratégia de cálculo (Strategy pattern)
 `lib/calculators/index.ts` mapeia `modeloId → EstrategiaCalculoModelo`. Cada estratégia:
-- Recebe os `vaos` e uma função `getValor(key)` (preço do produto pela `ProductKey`).
-- Devolve uma lista de `CalculoItem` (label, detalhe, subtotal) — só a parte
-  **estrutural** (vidro, perfis, tubos). Ferragens/opcionais universais (puxador,
-  fechadura, película, porta premium, kits de porta, lã de vidro, adicional noturno) são
-  somados **depois**, igual pra qualquer modelo, em `lib/useCalculator.ts`.
+- Recebe o **`ProjectInputs` inteiro** (não só `vaos`) e uma função `getValor(key)`
+  (preço do produto pela `ProductKey`) — o objeto inteiro é passado porque algumas
+  estratégias precisam de outros campos de projeto além dos vãos (ex.: Sacada lê
+  `inputs.corVidroSacada`).
+- Devolve uma lista de `CalculoItem` (label, detalhe, subtotal, **grupo**) — só a parte
+  **estrutural** (vidro, perfis, tubos — sempre `grupo: "estrutural"`). Ferragens/
+  opcionais universais (puxador, fechadura, película, porta premium, kits de porta, lã
+  de vidro, adicional noturno, RT, ART, caixa de ar-condicionado, respiro) são somados
+  **depois**, igual pra qualquer modelo, em `lib/useCalculator.ts`, sempre com
+  `grupo: "opcional"`. Esse campo `grupo` é o que alimenta o toggle Agrupado/Separado do
+  resumo (ver seção "Ferragens e Opcionais" e Passo 2 no Histórico).
 - Tem uma flag `usaTipoVao`: se falso, o campo "Tipo do Vão" fica oculto no formulário
   — MAS `ProjectCalculator.tsx` força esse campo visível mesmo assim se algum produto do
   catálogo tiver `tipoVaoAssociado` setado (senão o vínculo nunca teria como funcionar).
+- Tem uma flag `usaCorVidro`: se verdadeiro, mostra um seletor de cor do vidro (Incolor/
+  Verde) no cabeçalho do card de Vãos. Hoje só a Sacada usa.
 
 **Fórmula Slim (10mm e 8mm — mesma fórmula, `lib/calculators/slim.ts`)**:
 - Vidro = soma de `largura × altura` de cada vão.
@@ -170,20 +185,57 @@ individualmente.
 - Exemplo de referência (validado): 6,00m × 3,00m → 6 peças, Tubo = 6 (topo) + 7×3 = 21
   (verticais) = 27m → 5 barras de 6m.
 
+**Fórmula Sacada (`lib/calculators/sacada.ts`)** — não usa tipo de vão (`usaTipoVao:
+false`), usa cor do vidro (`usaCorVidro: true`). Cada vão da Sacada é um módulo
+independente (diferente do MiterGlass, aqui NÃO vira uma parede contínua):
+- Vidro: soma `largura × altura` de cada vão × preço da cor escolhida —
+  `vidroSacadaIncolor` (R$780/m²) ou `vidroSacadaVerde` (R$930/m²), conforme
+  `inputs.corVidroSacada`. Cor é uma escolha única pro orçamento inteiro, não por vão.
+- Kit: **cada vão calcula seu próprio kit (ou combinação de kits) pela LARGURA dele**,
+  depois soma-se entre vãos. Tabela de faixas (`kitSacada2m/3m/4m/6m` no catálogo):
+  até 2m → R$2.080 · até 3m → R$2.990 · até 4m → R$3.900 · até 6m → R$5.460.
+  Acima de 6m: combina kits gulosamente — desconta um kit de 6m enquanto sobrar mais de
+  6m, depois aplica a faixa certa no que restou. Ex. validado: vão de 7m = 1 kit de 6m
+  (R$5.460) + 1 kit de até 2m pro 1m restante (R$2.080) = R$7.540. Lógica isolada e
+  testada em `combinarKits()` — cobre também os limites exatos (2/3/4/6m) e múltiplos de
+  6m (12m = dois kits de 6m).
+
 ### Catálogo de Produtos (`ProductKey`)
 Chaves fixas que o sistema sabe calcular automaticamente: `vidro`, `perfilU`, `tubo2x2`,
 `perfilEngenharia`, `puxadorH`, `fechadura`, `pelicula`, `adicionalNoturno`,
-`portaPremium`, `laDeVidro`, `kitPortaSimples`, `kitPortaDupla`. Produtos cadastrados
+`portaPremium`, `laDeVidro`, `kitPortaSimples`, `kitPortaDupla`, `vidroSacadaIncolor`,
+`vidroSacadaVerde`, `kitSacada2m`, `kitSacada3m`, `kitSacada4m`, `kitSacada6m`,
+`artEngenheiro`, `caixaArCondicionado`, `respiroAluminio`. Produtos cadastrados
 manualmente pelo usuário sem uma dessas chaves (`key: null`) não entram no cálculo
 automaticamente — a menos que tenham um `tipoVaoAssociado` (aí entram 1x por vão daquele
-tipo, ver `lib/useCalculator.ts`).
+tipo, ver `lib/useCalculator.ts`). Todas as chaves-semente (incluindo as novas) são
+copiadas pra **todo** modelo, mesmo os que não usam (ex.: Slim carrega os kits de Sacada
+no catálogo sem usá-los) — é o mesmo comportamento que já existia antes (ex.: MiterGlass
+sempre teve "Perfil Engenharia" no catálogo mesmo não usando).
 
 ### Ferragens e Opcionais (Detalhado)
-Card reorganizado em 4 subgrupos visuais (`ProjectCalculator.tsx`, componente
+Card reorganizado em 5 subgrupos visuais (`ProjectCalculator.tsx`, componente
 `GrupoFerragens`): **Ferragens** (Puxador H, Fechadura PT Correr), **Kits de Porta**
 (Porta Premium, Kit Porta Simples R$600/un, Kit Porta Dupla R$920/un), **Acabamentos**
 (Película, Lã de Vidro — checkbox + preço editável inline), **Serviços** (Instalação
-Noturna).
+Noturna), **Outros** (Reserva Técnica — RT, valor digitado livremente e somado direto ao
+total, sem passar pelo catálogo; Caixa Ar Condicionado R$4.550/un com qtd.; Respiro
+Alumínio R$780/m² com m² digitado manualmente, independente da área dos vãos; ART
+Engenheiro R$450 fixo via checkbox).
+
+**Agrupado vs Separado**: o card "Resumo do Orçamento" tem um toggle (dois botões estilo
+segmented control, igual ao da navegação do `AppHeader`) que troca entre mostrar
+`resultado.itens` corrido (Agrupado, padrão) ou dividido em duas listas por `item.grupo`
+com um subtotal cada — **Subtotal da Divisória** (`resultado.subtotalEstrutural`, soma
+dos itens `grupo: "estrutural"`) e **Subtotal de Opcionais**
+(`resultado.subtotalOpcionais`, soma dos `grupo: "opcional"`) — mais o Total Final
+(`resultado.total`, sempre visível no rodapé do card independente do modo). Esse
+`modoResumo` é estado local do componente (não persiste no Zustand) — reseta pra
+Agrupado a cada F5, de propósito, pra não ser mais uma coisa pra migrar no `merge()`.
+**Regra de arredondamento**: todo valor exibido passa por `formatBRL()`
+(`lib/utils.ts`), que já arredonda pra inteiro (`Math.round`, sem centavos) — isso é
+regra de negócio explícita, qualquer novo valor exibido em R$ deve usar essa função, não
+formatar na mão.
 
 ### Orçamento Simplificado — opcionais por modelo
 Diferente do Detalhado (ferragens globais), aqui cada modelo tem seus próprios opcionais
@@ -331,17 +383,39 @@ importantes:
 ## 9. Pendências Conhecidas
 
 - Sem fluxo de "esqueci minha senha" na UI (reset é manual, pelo painel do Supabase).
-- Kits de Porta / Ferragens do Detalhado não têm equivalente no Simplificado (só
-  Película, Lã de Vidro, Porta Premium, Adicional Noturno lá) — não foi pedido ainda,
-  mas é uma assimetria a considerar se pedirem.
+- Nenhum dos opcionais/campos exclusivos do Detalhado tem equivalente no Simplificado —
+  Kits de Porta, RT, ART Engenheiro, Caixa Ar Condicionado, Respiro Alumínio, e a própria
+  Sacada (Simplificado só tem Película/Lã de Vidro/Porta Premium/Adicional Noturno por
+  modelo). Não foi pedido ainda, mas é uma assimetria a considerar se pedirem.
+- `valorM2` da Sacada está com placeholder `0` — não é um preço real, só existe porque
+  todo `Modelo` precisa desse campo. Se for usar Sacada no Simplificado, precisa de um
+  valor de verdade lá (ou repensar se a Sacada faz sentido nessa tela — a lógica dela é
+  bem diferente de "preço fechado por m²").
 - `supabase/migration_002_vendedor_codigo.sql` precisa ter sido rodada manualmente pelo
   usuário no Supabase pra "Meus Orçamentos" funcionar (colunas `codigo`/`nome_vendedor`).
+- **Sacada, RT, toggle Agrupado/Separado e os novos opcionais (Passo 1-3 de
+  2026-08-28) foram validados por `tsc`/`eslint`/`build` e um teste isolado da lógica de
+  combinação de kits — mas NÃO foram verificados na UI renderizada, porque o sistema
+  agora exige login (ver seção 6) e não existe conta criada ainda. Testar na tela assim
+  que houver uma conta.**
 
 ## 10. Histórico de Mudanças
 
 > Entradas resumidas, mais recente primeiro. Não precisa repetir o que já está descrito
 > nas seções acima — só registrar o quê e (se não-óbvio) o porquê.
 
+- **2026-08-28** — Novo modelo/estratégia **Sacada** (`lib/calculators/sacada.ts`):
+  vidro por m² com cor (Incolor R$780 / Verde R$930) + kit por largura do vão, com
+  combinação gulosa de kits acima de 6m (ver seção 4). Novo campo **RT (Reserva
+  Técnica)** — valor livre somado direto ao total, sem catálogo. Novos opcionais
+  universais: ART Engenheiro (R$450 fixo), Caixa Ar Condicionado (R$4.550/un),
+  Respiro Alumínio (R$780/m², m² digitado manualmente). `CalculoItem` ganhou o campo
+  `grupo` ("estrutural" | "opcional") e `EstrategiaCalculoModelo.calcularEstrutura`
+  passou a receber o `ProjectInputs` inteiro em vez de só `vaos` (pra Sacada conseguir
+  ler a cor do vidro). `ResultadoCalculo` ganhou `subtotalEstrutural`/
+  `subtotalOpcionais`, e o Resumo do Orçamento ganhou um toggle Agrupado/Separado pra
+  mostrar esses subtotais separados. 9 `ProductKey` novas, todas com migração
+  retroativa no `merge()` do `useProductStore`. Não verificado na UI (ver Pendências).
 - **2026-08-28** — Sistema de login obrigatório com Supabase Auth (proxy.ts + DAL,
   "manter conectado", sem cadastro público). Ver seção 6.
 - **2026-08-28** — Ferragens/Opcionais reorganizado em subgrupos; "Qtd. Fechaduras" →

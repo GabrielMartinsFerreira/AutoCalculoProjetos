@@ -1,4 +1,4 @@
-import type { CalculoItem, Vao } from "../types";
+import type { CalculoItem, ProjectInputs, Vao } from "../types";
 import type { EstrategiaCalculoModelo, GetValor } from "./types";
 
 function areaTotal(vaos: Vao[]) {
@@ -29,7 +29,8 @@ function metragensUInvertido(vaos: Vao[]) {
   );
 }
 
-function calcularEstrutura(vaos: Vao[], getValor: GetValor): CalculoItem[] {
+function calcularEstrutura(inputs: ProjectInputs, getValor: GetValor): CalculoItem[] {
+  const { vaos } = inputs;
   const areaTotalVidro = areaTotal(vaos);
   const metragemPerfilU = perimetroTotal(vaos);
   const { tubo2x2: metragemTubo2x2, perfilEngenharia: metragemPerfilEngenharia } =
@@ -44,21 +45,25 @@ function calcularEstrutura(vaos: Vao[], getValor: GetValor): CalculoItem[] {
       label: "Vidro",
       detalhe: `${areaTotalVidro.toFixed(2)} m² × ${getValor("vidro").toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`,
       subtotal: areaTotalVidro * getValor("vidro"),
+      grupo: "estrutural",
     },
     {
       label: "Perfil U 10mm",
       detalhe: `${metragemPerfilU.toFixed(2)} m lineares → ${qtdBarrasPerfilU} barra(s) de 6m`,
       subtotal: qtdBarrasPerfilU * getValor("perfilU"),
+      grupo: "estrutural",
     },
     {
       label: "Tubo 2x2",
       detalhe: `${metragemTubo2x2.toFixed(2)} m lineares → ${qtdBarrasTubo2x2} barra(s) de 6m`,
       subtotal: qtdBarrasTubo2x2 * getValor("tubo2x2"),
+      grupo: "estrutural",
     },
     {
       label: "Perfil Engenharia",
       detalhe: `${metragemPerfilEngenharia.toFixed(2)} m lineares → ${qtdBarrasPerfilEngenharia} barra(s) de 6m`,
       subtotal: qtdBarrasPerfilEngenharia * getValor("perfilEngenharia"),
+      grupo: "estrutural",
     },
   ];
 }
@@ -67,5 +72,6 @@ export const estrategiaSlim: EstrategiaCalculoModelo = {
   id: "slim",
   nome: "Divisória Slim",
   usaTipoVao: true,
+  usaCorVidro: false,
   calcularEstrutura,
 };
