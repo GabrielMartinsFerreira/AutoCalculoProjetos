@@ -219,11 +219,24 @@ pelo carrinho do Detalhado — é assim que um item sabe renderizar o formulári
 
 **Fórmula Slim (10mm e 8mm — mesma fórmula, `lib/calculators/slim.ts`)**:
 - Vidro = soma de `largura × altura` de cada vão.
-- Perfil U = perímetro total (`2×largura + 2×altura` de cada vão) → barras de 6m.
+- Perfil U = perímetro total (`2×largura + 2×altura` de cada vão) → barras de 6m
+  (soma linear simples — a peça é vendida por metro corrido, permite emenda).
 - Estrutura em U invertido (laterais + topo, sem o vão de baixo):
-  - `Fixo` / `Porta de Abrir`: tudo em Tubo 2x2 (`2×altura + largura` por vão).
-  - `Porta de Correr`: laterais em Tubo 2x2 (`2×altura`), topo/trilho em Perfil
-    Engenharia (`largura`).
+  - `Fixo` / `Porta de Abrir`: as duas laterais (altura) + o topo (largura), tudo em
+    Tubo 2x2.
+  - `Porta de Correr`: só as duas laterais (altura) em Tubo 2x2 — o topo/trilho vira
+    Perfil Engenharia (`largura`, soma linear simples, barras de 6m).
+- **Tubo 2x2 = Plano de Corte, não soma linear** (`planoCorteTubo2x2()` em `slim.ts`):
+  diferente do Perfil U/Perfil Engenharia, o Tubo 2x2 não permite emenda — cada peça
+  (lateral ou topo) tem que sair de uma única barra de 6m, inteira. Por isso o cálculo é
+  um bin-packing 1D (First Fit) sobre os cortes de **cada vão isoladamente** — a sobra
+  de um vão nunca é reaproveitada pelo próximo (cada vão é uma frente de corte
+  separada, como na obra real) — e o total de barras do projeto é a SOMA das barras de
+  cada vão, não um bin-packing sobre a metragem total. Um corte nunca é dividido entre
+  duas barras. Exemplo de referência (validado): vão Fixo de 2,80m×1,00m → cortes
+  [2,80; 2,80; 1,00] → a barra que sobrou 2,80m depois do primeiro corte fica com 0,40m,
+  onde o topo de 1,00m não cabe → abre uma 2ª barra só pro topo → **2 barras (12m
+  cobrados)**, não 6,60m como daria a soma linear antiga.
 
 **Fórmula MiterGlass (`lib/calculators/miterglass.ts`)** — modulada em peças de ~1m, não
 usa tipo de vão (`usaTipoVao: false`). Múltiplos vãos = tratado como uma parede contínua:
@@ -575,6 +588,28 @@ importantes:
 
 > Entradas resumidas, mais recente primeiro. Não precisa repetir o que já está descrito
 > nas seções acima — só registrar o quê e (se não-óbvio) o porquê.
+
+- **2026-09-01** — Correção do cálculo do Tubo 2x2 no modelo Slim
+  (`lib/calculators/slim.ts`): a fórmula antiga somava as metragens linearmente e
+  dividia por 6m (`Math.ceil(metragemTotal / 6)`), o que presume emendas/junções
+  infinitas dentro da mesma peça — irreal pro Tubo 2x2 (só Perfil U e Perfil
+  Engenharia, vendidos por metro corrido, podem ter emenda). Substituído por um
+  algoritmo de **Plano de Corte** (`planoCorteTubo2x2()`): bin-packing 1D (First Fit)
+  contra barras de 6m, **isolado por vão** (a sobra de um vão nunca é reaproveitada
+  pelo próximo) e **sem emendas** (um corte nunca é dividido entre duas barras). Em
+  projetos com vários vãos pequenos ou alturas próximas de submúltiplos de 6m, isso
+  cobra mais barras do que a fórmula linear antiga (ela subestimava o consumo real).
+  Só o Tubo 2x2 mudou — Perfil U e Perfil Engenharia continuam soma linear + `Math.ceil`
+  (permitem emenda de verdade). Mudança isolada em `lib/calculators/slim.ts`
+  (`lib/useCalculator.ts` não foi tocado — o arredondamento pra inteiro de cada
+  `CalculoItem.subtotal` já é feito lá, de forma centralizada pra qualquer estratégia,
+  desde a reforma "Carrinho" abaixo). Como Slim 8mm reusa a mesma estratégia da Slim
+  10mm (`slim8mm: estrategiaSlim` em `lib/calculators/index.ts`), a correção vale pros
+  dois automaticamente. Validado por `tsc`/`eslint`/`build` (limpos) + script isolado
+  (`tsx`) reproduzindo o exemplo de referência do briefing (vão 2,80m×1,00m → 2 barras,
+  12m cobrados) e casos de borda (Porta de Correr sem topo, isolamento entre vãos
+  pequenos que juntos caberiam numa barra só mas são cortados separados, vão sem
+  cortes) — todos batendo.
 
 - **2026-09-01** — Reforma "Carrinho" do Orçamento Detalhado + módulos Box Padrão e
   Espelhos:
