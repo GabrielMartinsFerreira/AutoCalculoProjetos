@@ -67,7 +67,8 @@ app/
 components/
   HomeContent.tsx              Conteúdo real da Detalhado (Client) — movido de app/page.tsx
   SimplificadoContent.tsx      Conteúdo real da Simplificado (Client)
-  ProjectCalculator.tsx        Calculadora Detalhado: vãos + ferragens/opcionais + resumo
+  ProjectCalculator.tsx        Calculadora Detalhado: "carrinho" de itens (Divisória/Box/
+                                Espelho) + resumo do item ativo + Total Geral do projeto
   SimplifiedCalculator.tsx     Calculadora Simplificado: vãos + card por modelo
   ProductCatalog.tsx           CRUD do catálogo de produtos (por modelo selecionado)
   ModeloCatalog.tsx            CRUD de modelos de divisória (usado na Simplificado)
@@ -94,6 +95,8 @@ lib/
     slim.ts                     Fórmula Slim (10mm e 8mm — mesma fórmula, catálogo separado)
     miterglass.ts                Fórmula MiterGlass (modulada em peças de ~1m)
     sacada.ts                    Fórmula Sacada (vidro por cor + kit combinado por largura)
+    box.ts                       Fórmula Box Padrão (preço fechado: medida frontal × pagamento)
+    espelho.ts                   Fórmula Espelhos (m² com piso de 0,3m², modelo base/especial)
     index.ts                     obterEstrategia(modeloId) — fallback pra Slim se não mapeado
   dal.ts                        getUsuarioLogado() — única fonte de verdade sobre sessão
                                 no servidor (cache() do React, usa getUser() não getSession())
@@ -118,32 +121,82 @@ proxy.ts                        Roda em toda página (exceto /api, estáticos): 
 
 ## 4. Conceitos de Domínio
 
+### Carrinho de Itens (Orçamento Detalhado)
+Desde a reforma "Carrinho" (2026-09-01), o Orçamento Detalhado não é mais "um projeto =
+um modelo = um cálculo" — é um **array de itens independentes**
+(`OrcamentoDetalhadoDados.itens: ItemOrcamentoDetalhado[]`), cada um com seu próprio
+`ambiente` (nome livre, ex. "Banheiro Suíte"), seu próprio `modeloId` e seu próprio
+`inputs: ProjectInputs`. Um projeto real vira um orçamento só, com vários itens: uma
+Divisória Slim pro banheiro, um Box Padrão pra outro banheiro, um Espelho pra sala —
+cada um calculado pela sua própria estratégia e catálogo, sem se misturar.
+- **`ProjectInputs` é o mesmo formato pros três tipos de item** (Divisória, Box,
+  Espelho) — cada estratégia (`lib/calculators/`) só lê os campos que lhe interessam
+  (ex.: Box lê só `medidaFrontalBox`/`tipoPagamentoBox`, ignora `vaos`). Evita um
+  segundo formato de inputs por tipo e mantém o Strategy pattern intacto. O "tipo" de um
+  item não é um campo separado — é **derivado do `modeloId`**: `"box"` e `"espelho"` são
+  ids fixos e reservados (modelos-semente, como `"sacada"`); qualquer outro `modeloId` é
+  tratado como Divisória.
+- **RT (Reserva Técnica) não é mais por item** — é do **projeto inteiro**
+  (`OrcamentoDetalhadoDraftStore.tipoRT`/`.valorRT`, nível do carrinho, não dentro de
+  cada `inputs`). Aplicada **uma única vez**, sobre a soma de todos os itens (ver
+  subseção RT abaixo).
+- Estado no Zustand (`useOrcamentoDetalhadoDraft`, `lib/store.ts`): `itens[]`,
+  `itemAtivoId` (qual item está sendo editado na tela), `tipoRT`/`valorRT` do projeto.
+  Ações: `addItem(modeloId)`, `removeItem`, `renomearItem`, `trocarModeloItem`,
+  `selecionarItem`, `setInputsItem`, `addVaoItem`/`updateVaoItem`/`removeVaoItem`
+  (todas com o `id` do item como primeiro parâmetro — não existe mais um `setInputs`
+  global), `setRT`, `setDraft` (substitui o carrinho inteiro, usado só ao abrir um
+  orçamento salvo em "Meus Orçamentos"), `reset`. Sempre sobra pelo menos 1 item —
+  `removeItem` não deixa o carrinho vazio.
+- **Migração do formato antigo ("single-item")**: o `merge()` de `useOrcamentoDetalhadoDraft`
+  detecta o formato pré-carrinho (um único `inputs` direto no rascunho, com `tipoRT`/
+  `valorRT` dentro dele) e migra automaticamente pro novo formato — o `inputs` antigo
+  vira o item único `itens[0]`, e a RT que morava nele sobe pro nível do draft. O modelo
+  usado antigamente **não** estava salvo nesse draft (vivia só no `useModeloStore`
+  global, fora dele) — não dá pra recuperar com certeza, então a migração assume
+  `"slim"` como fallback; o usuário troca o modelo do item pelo seletor, se precisar.
+- `lib/useCalculator.ts` reflete essa separação em duas funções: `calcularOrcamento`
+  (um item, sem RT) e `calcularResumoCarrinho`/`useResumoCarrinho` (agrega todos os
+  itens do carrinho — cada um pode usar um modelo/catálogo diferente — e só então
+  aplica a RT do projeto).
+- UI (`ProjectCalculator.tsx`): card "Itens do Orçamento" no topo (chips pra trocar de
+  item ativo + excluir + botão "Adicionar Item" com um menu de todos os modelos
+  disponíveis); abaixo, formulário do item ativo (Vãos, ou Box, ou Espelho, dependendo
+  do `modeloId`); na coluna lateral, "Resumo do Item Ativo" (Agrupado/Separado, como
+  antes, mas escopado a só um item) e "Total do Projeto" (RT + Total Geral + botão
+  Salvar, que salva o carrinho inteiro).
+
 ### Vão
 Um módulo/abertura da divisória: `largura`, `altura`, e (no Detalhado) um `tipo`:
 `"Fixo" | "Porta de Abrir" | "Porta de Correr"`. Um projeto tem 1+ vãos, cada um
 contribui pra área de vidro e pro cálculo estrutural. O Simplificado usa `VaoSimples`
 (só largura/altura, sem tipo — o preço é por m² fechado, não importa o tipo).
 
-### Modelo (Divisória Slim / Slim 8mm / MiterGlass / BlindGlass / Sacada)
+### Modelo (Divisória Slim / Slim 8mm / MiterGlass / BlindGlass / Sacada / Box Padrão / Espelhos)
 Cada modelo tem:
 - Sua **própria fórmula estrutural** (Strategy pattern, `lib/calculators/`) — como
-  vidro/perfis/tubos são calculados a partir dos vãos.
+  vidro/perfis/tubos (ou preço fechado, no caso do Box) são calculados a partir dos
+  inputs do item.
 - Seu **próprio catálogo de produtos**, totalmente independente dos outros modelos
   (`useProductStore.productsByModelo[modeloId]`). Editar o preço da fechadura no Slim
   NUNCA afeta o preço da fechadura no MiterGlass. Um modelo novo criado pelo usuário
   nasce com catálogo vazio.
-- Seu **valorM2** (usado só no Simplificado — a Sacada tem isso como placeholder `0`,
-  já que não é precificada por m² fechado, ver seção "Sacada" abaixo).
+- Seu **valorM2** (usado só no Simplificado — Sacada, Box e Espelho têm isso como
+  placeholder `0`, já que nenhum dos três é precificado por m² fechado, ver seções
+  abaixo).
 
 Modelos-semente (`SEED_MODELO_IDS` em `lib/store.ts`): `slim`, `slim8mm`, `miterglass`,
-`blindglass`, `sacada`. Usuário pode criar modelos novos livremente (`ModeloCatalog.tsx`)
-— esses caem na estratégia de cálculo da Slim por padrão (`obterEstrategia` faz
-fallback), até ganharem fórmula própria. **Importante**: pra uma estratégia nova ficar
-de fato vinculada a um modelo, o `id` do modelo tem que bater literalmente com a chave
-usada em `ESTRATEGIAS` (`lib/calculators/index.ts`) — um modelo criado manualmente pela
-UI ganha um `crypto.randomUUID()` como id, então nunca vai casar sozinho com uma
-estratégia nova. É por isso que a Sacada foi adicionada como modelo-semente (id fixo
-`"sacada"`), não como algo que o usuário criaria à mão.
+`blindglass`, `sacada`, `box`, `espelho`. Usuário pode criar modelos novos livremente
+(`ModeloCatalog.tsx`) — esses caem na estratégia de cálculo da Slim por padrão
+(`obterEstrategia` faz fallback), até ganharem fórmula própria. **Importante**: pra uma
+estratégia nova ficar de fato vinculada a um modelo, o `id` do modelo tem que bater
+literalmente com a chave usada em `ESTRATEGIAS` (`lib/calculators/index.ts`) — um modelo
+criado manualmente pela UI ganha um `crypto.randomUUID()` como id, então nunca vai casar
+sozinho com uma estratégia nova. É por isso que Sacada, Box e Espelho foram adicionados
+como modelos-semente (ids fixos `"sacada"`/`"box"`/`"espelho"`), não como algo que o
+usuário criaria à mão. `"box"` e `"espelho"` também são tratados como ids **reservados**
+pelo carrinho do Detalhado — é assim que um item sabe renderizar o formulário certo (ver
+"Carrinho de Itens" acima).
 
 ### Estratégia de cálculo (Strategy pattern)
 `lib/calculators/index.ts` mapeia `modeloId → EstrategiaCalculoModelo`. Cada estratégia:
@@ -200,67 +253,123 @@ independente (diferente do MiterGlass, aqui NÃO vira uma parede contínua):
   testada em `combinarKits()` — cobre também os limites exatos (2/3/4/6m) e múltiplos de
   6m (12m = dois kits de 6m).
 
+**Fórmula Box Padrão (`lib/calculators/box.ts`)** — não usa vãos nem m² (`usaTipoVao:
+false`, `usaCorVidro: false`): é **preço fechado**, cruzando "Medida Frontal"
+(`inputs.medidaFrontalBox`, restrita às 8 opções da tabela — dropdown, não texto livre)
+com "Tipo de Pagamento" (`inputs.tipoPagamentoBox`: `"vista" | "cartao"`). Cada uma das
+16 combinações (8 medidas × 2 formas de pagamento) tem sua própria `ProductKey` no
+catálogo (ex.: `box900Vista`, `box900Cartao`, ..., `box2200Cartao`) — os preços de
+tabela são só o **valor inicial** desses produtos, totalmente editáveis depois em
+Cadastro de Produtos, igual a qualquer outro preço do sistema. `OPCOES_MEDIDA_BOX`
+(exportado do próprio `box.ts`) é a única fonte de verdade do mapeamento
+medida→(keyVista, keyCartao) — usado tanto pelo cálculo quanto pelo dropdown da UI. Item
+Box **não tem ferragens/opcionais universais** (puxador, fechadura, kits de porta...) —
+só o preço de tabela, isolado exatamente como os opcionais da Sacada (ver
+`lib/useCalculator.ts`, `ehItemFechado`).
+
+**Fórmula Espelhos (`lib/calculators/espelho.ts`)** — não usa vãos nem tipo de vão
+(`usaTipoVao: false`, `usaCorVidro: false`); recebe `inputs.larguraEspelho` /
+`.alturaEspelho` (um par só, não um array — pra vários espelhos, o usuário adiciona
+vários itens "Espelhos" no carrinho).
+- **Área mínima cobrada**: `AREA_MINIMA_M2 = 0.3` — se `largura × altura < 0.3m²`, cobra
+  como se fosse 0,3m² (`areaCobradaEspelho()`, exportada e reusada também pelo cálculo
+  do Desembaçador Elétrico abaixo, pra manter uma única noção de "área faturável").
+- **Modelo Base × Modelo Especial**: `inputs.espelhoModeloBase` (uma das 9 chaves de
+  `MODELOS_BASE_ESPELHO` — combinações de material+acabamento, ex. "Guardian 4mm —
+  Bizote", preço por m²) é o padrão; se `inputs.espelhoModeloEspecial` também estiver
+  setado (uma das 9 chaves de `MODELOS_ESPECIAIS_ESPELHO`, ex. "Orgânico c/ Led"), ele
+  **anula** o base — é outro preço fechado por m², não uma soma dos dois.
+- **Junção/Revestimento/Modelo**: `inputs.incluirJuncaoRevestimentoEspelho` soma +20%
+  sobre o subtotal **base do vidro** (área cobrada × valor/m² do modelo escolhido) — não
+  incide sobre os adicionais avulsos abaixo (são hardware itemizado à parte).
+- **Adicionais** (só existem quando `modeloId === "espelho"`, mesmo isolamento da
+  Sacada/Box — ver `lib/useCalculator.ts`): Desembaçador Elétrico (checkbox, R$/m² ×
+  área cobrada — usa o mesmo piso de 0,3m²), Recorte CX de Luz (R$/un), Chassis Perfil U
+  (R$/peça), Touch Screen (R$/peça).
+- Todas as 22 `ProductKey` de Espelho (9 base + 9 especiais + 4 adicionais) são
+  editáveis em Cadastro de Produtos, mesmo padrão do Box acima.
+
 ### Catálogo de Produtos (`ProductKey`)
-Chaves fixas que o sistema sabe calcular automaticamente: `vidro`, `perfilU`, `tubo2x2`,
-`perfilEngenharia`, `puxadorH`, `fechadura`, `pelicula`, `adicionalNoturno`,
-`portaPremium`, `laDeVidro`, `kitPortaSimples`, `kitPortaDupla`, `vidroSacadaIncolor`,
-`vidroSacadaVerde`, `kitSacada2m`, `kitSacada3m`, `kitSacada4m`, `kitSacada6m`,
-`artEngenheiro`, `caixaArCondicionado`, `respiroAluminio`. Produtos cadastrados
-manualmente pelo usuário sem uma dessas chaves (`key: null`) não entram no cálculo
-automaticamente — a menos que tenham um `tipoVaoAssociado` (aí entram 1x por vão daquele
-tipo, ver `lib/useCalculator.ts`). Todas as chaves-semente (incluindo as novas) são
-copiadas pra **todo** modelo, mesmo os que não usam (ex.: Slim carrega os kits de Sacada
-no catálogo sem usá-los) — é o mesmo comportamento que já existia antes (ex.: MiterGlass
-sempre teve "Perfil Engenharia" no catálogo mesmo não usando).
+Chaves fixas que o sistema sabe calcular automaticamente: as estruturais/universais
+(`vidro`, `perfilU`, `tubo2x2`, `perfilEngenharia`, `puxadorH`, `fechadura`, `pelicula`,
+`adicionalNoturno`, `portaPremium`, `laDeVidro`, `kitPortaSimples`, `kitPortaDupla`), as
+da Sacada (`vidroSacadaIncolor`, `vidroSacadaVerde`, `kitSacada2m/3m/4m/6m`,
+`artEngenheiro`, `caixaArCondicionado`, `respiroAluminio`), as do Box (16 chaves
+`box{medida}{Vista|Cartao}`, ver "Fórmula Box Padrão" acima) e as do Espelho (22 chaves
+`espelho*`, ver "Fórmula Espelhos" acima). Produtos cadastrados manualmente pelo usuário
+sem uma dessas chaves (`key: null`) não entram no cálculo automaticamente — a menos que
+tenham um `tipoVaoAssociado` (aí entram 1x por vão daquele tipo, ver
+`lib/useCalculator.ts`). Todas as chaves-semente (incluindo as novas) são copiadas pra
+**todo** modelo, mesmo os que não usam (ex.: Slim carrega as 38 chaves de Sacada/Box/
+Espelho no catálogo sem usá-las) — é o mesmo comportamento que já existia antes (ex.:
+MiterGlass sempre teve "Perfil Engenharia" no catálogo mesmo não usando).
 
 ### Ferragens e Opcionais (Detalhado)
-Card em subgrupos visuais (`ProjectCalculator.tsx`, componente `GrupoFerragens`):
-**Ferragens** (Puxador H, Fechadura PT Correr), **Kits de Porta** (Porta Premium, Kit
-Porta Simples R$600/un, Kit Porta Dupla R$920/un), **Acabamentos** (Película, Lã de
-Vidro — checkbox + preço editável inline), **Serviços** (Instalação Noturna),
-**Reserva Técnica (RT)** (sempre visível, qualquer modelo — ver abaixo), e
-**Opcionais da Sacada** (Caixa Ar Condicionado, Respiro Alumínio, ART Engenheiro) —
-esse último grupo **só renderiza quando `modeloSelecionadoId === "sacada"`**, e o
-cálculo espelha isso: `lib/useCalculator.ts` só soma esses 3 itens (e só os inclui em
-`resultado.itens`) dentro do mesmo `if (modeloId === "sacada")`. Pra qualquer outro
-modelo (Slim, MiterGlass, BlindGlass...) esses 3 itens simplesmente não existem no
-orçamento — nem aparecem, nem contam pro total.
+Card em subgrupos visuais (`ProjectCalculator.tsx`, componente `GrupoFerragens`) — só
+aparece quando o item ativo é uma **Divisória** (`modeloId` diferente de `"box"`/
+`"espelho"`; Box não tem ferragens, e Espelho tem seus próprios "Adicionais do Espelho"
+dentro do card "Espelho", ver "Fórmula Espelhos" acima): **Ferragens** (Puxador H,
+Fechadura PT Correr), **Kits de Porta** (Porta Premium, Kit Porta Simples R$600/un, Kit
+Porta Dupla R$920/un), **Acabamentos** (Película, Lã de Vidro — checkbox + preço
+editável inline), **Serviços** (Instalação Noturna), e **Opcionais da Sacada** (Caixa Ar
+Condicionado, Respiro Alumínio, ART Engenheiro) — esse último grupo **só renderiza
+quando `itemAtivo.modeloId === "sacada"`**, e o cálculo espelha isso:
+`lib/useCalculator.ts` só soma esses 3 itens (e só os inclui em `resultado.itens`)
+dentro do mesmo `if (modeloId === "sacada")`. Pra qualquer outro modelo esses 3 itens
+simplesmente não existem no orçamento — nem aparecem, nem contam pro total. A Reserva
+Técnica **não mora mais aqui** — ver subseção abaixo.
 
-**Reserva Técnica (RT) — Fixo vs Porcentagem** (`ProjectInputs.tipoRT` +
-`.valorRT`, mesmo par de campos em `SimplifiedInputs`): toggle de dois botões (R$ / %,
-mesmo estilo segmented control da navegação do `AppHeader`) ao lado do input de valor.
+**Reserva Técnica (RT) — Fixo vs Porcentagem, e do PROJETO INTEIRO no Detalhado**: desde
+a reforma "Carrinho" (2026-09-01), a RT do Detalhado deixou de ser por item e passou a
+ser do **projeto inteiro** (`OrcamentoDetalhadoDraftStore.tipoRT`/`.valorRT`, card "Total
+do Projeto" na coluna lateral de `ProjectCalculator.tsx`, fora do form de qualquer item).
+No Simplificado continua igual a antes: `SimplifiedInputs.tipoRT`/`.valorRT`. Em ambos,
+toggle de dois botões (R$ / %, mesmo estilo segmented control da navegação do
+`AppHeader`) ao lado do input de valor.
 - `tipoRT: "fixo"` → `valorRT` é somado direto ao total, em R$.
 - `tipoRT: "percentual"` → `valorRT` é uma porcentagem (0-100) aplicada sobre o total de
-  tudo mais já somado (**nunca sobre si mesma** — por isso a RT é sempre o **último**
-  item calculado em `calcularOrcamento()`/`calcularOrcamentoSimplificado()`: primeiro
-  soma-se estrutural + todos os outros opcionais, só depois a RT entra em cima desse
-  subtotal).
-- No Detalhado, a RT calculada aparece como um `CalculoItem` normal no Resumo (mostra o
-  valor em R$ mesmo no modo percentual, com o `detalhe` explicando a conta: "X% sobre
-  R$Y") — e também um preview inline ao lado do input quando `tipoRT === "percentual"`,
-  pra não depender só de rolar até o Resumo.
-- No Simplificado, a RT é **configurada uma vez só** (um tipo/valor global pra página
-  inteira, no card "Comparador de Modelos"), mas **calculada individualmente por
-  modelo** — cada card usa o próprio total (`custoBase + custoOpcionaisTotal`) como base
-  do percentual, então o R$ da RT muda de card pra card mesmo com a mesma porcentagem
-  configurada. Isso fica em `ResultadoSimplificadoItem.custoRT` (campo novo, separado de
-  `opcionais`/`custoOpcionaisTotal` porque o card do Simplificado não itera
-  genericamente sobre `opcionais[]` — cada opcional tem sua própria UI curada à mão).
+  tudo mais já somado (**nunca sobre si mesma**).
+- **No Detalhado**: `calcularResumoCarrinho()` (`lib/useCalculator.ts`) soma o `.total`
+  de **todos os itens do carrinho** primeiro (`totalGeralAntesDoRT`) — cada item pode
+  usar um modelo/catálogo diferente — e só então aplica a RT do projeto **uma única
+  vez** sobre essa soma (`valorRTCalculado`), chegando no `totalGeralFinal`. A RT não é
+  mais um `CalculoItem` dentro de `resultado.itens` de item nenhum — vive só no
+  `ResumoCarrinho`, mostrada no card "Total do Projeto" (com preview inline quando
+  `tipoRT === "percentual"`, igual antes).
+- **No Simplificado**: a RT continua **configurada uma vez só** (um tipo/valor global
+  pra página inteira, no card "Comparador de Modelos"), mas **calculada
+  individualmente por modelo** — cada card usa o próprio total
+  (`custoBase + custoOpcionaisTotal`) como base do percentual, então o R$ da RT muda de
+  card pra card mesmo com a mesma porcentagem configurada. Isso fica em
+  `ResultadoSimplificadoItem.custoRT` (campo separado de `opcionais`/
+  `custoOpcionaisTotal` porque o card do Simplificado não itera genericamente sobre
+  `opcionais[]` — cada opcional tem sua própria UI curada à mão). Esse comportamento
+  **não mudou** na reforma "Carrinho" — só o Detalhado virou carrinho, o Simplificado
+  segue "single-shot" por design (compara modelos, não tem conceito de "itens").
 
-**Agrupado vs Separado** (só Detalhado): o card "Resumo do Orçamento" tem um toggle que
-troca entre mostrar `resultado.itens` corrido (Agrupado, padrão) ou dividido em duas
-listas por `item.grupo` com um subtotal cada — **Subtotal da Divisória**
-(`resultado.subtotalEstrutural`) e **Subtotal de Opcionais**
-(`resultado.subtotalOpcionais`, já inclui a RT) — mais o Total Final
-(`resultado.total`, sempre visível no rodapé do card independente do modo). Esse
-`modoResumo` é estado local do componente (não persiste no Zustand) — reseta pra
-Agrupado a cada F5, de propósito, pra não ser mais uma coisa pra migrar no `merge()`.
+**Agrupado vs Separado** (só Detalhado, escopado ao **item ativo**): o card "Resumo do
+Item Ativo" tem um toggle que troca entre mostrar `resultado.itens` corrido (Agrupado,
+padrão) ou dividido em duas listas por `item.grupo` com um subtotal cada — **Subtotal da
+Divisória** (`resultado.subtotalEstrutural`) e **Subtotal de Opcionais**
+(`resultado.subtotalOpcionais`) — mais o "Subtotal do Item" (`resultado.total`, sempre
+visível no rodapé do card independente do modo; **não inclui mais a RT**, que agora só
+existe no nível do projeto, ver acima). Esse `modoResumo` é estado local do componente
+(não persiste no Zustand) — reseta pra Agrupado a cada F5/troca de item, de propósito,
+pra não ser mais uma coisa pra migrar no `merge()`.
 
-**Regra de arredondamento**: todo valor exibido passa por `formatBRL()`
-(`lib/utils.ts`), que já arredonda pra inteiro (`Math.round`, sem centavos) — isso é
-regra de negócio explícita, qualquer novo valor exibido em R$ deve usar essa função
-(inclusive a RT calculada), não formatar na mão. Os valores continuam com casas decimais
-internamente até o momento de exibir — arredondamento é só na exibição, não no cálculo.
+**Regra de arredondamento (Regra de Ouro)**: desde a reforma "Carrinho", o
+arredondamento não é só na exibição — `calcularOrcamento()` (`lib/useCalculator.ts`)
+aplica `Math.round()` em **cada `CalculoItem.subtotal`** no momento em que os itens são
+montados, antes até de somar os subtotais agregados (`subtotalEstrutural`,
+`subtotalOpcionais`, `total`) — então o sistema nunca mais trabalha com centavos em
+nenhum item ou subtotal individual, a partir do core. `calcularResumoCarrinho()`
+arredonda também o `valorRTCalculado` do projeto. Além disso, todo valor exibido
+continua passando por `formatBRL()` (`lib/utils.ts`, também `Math.round`) — é
+redundante com o arredondamento do core, mas intencional (dupla proteção, sem custo).
+Regra de negócio explícita: qualquer novo subtotal ou valor exibido em R$ deve seguir
+esse padrão, não formatar/arredondar na mão. (O Simplificado, fora do escopo dessa
+reforma, **não** ganhou esse arredondamento no core — continua só arredondando na
+exibição via `formatBRL()`, como sempre foi.)
 
 ### Orçamento Simplificado — opcionais por modelo + Comparador Seletivo
 Diferente do Detalhado (ferragens globais), aqui cada modelo tem seus próprios opcionais
@@ -273,11 +382,17 @@ Slim.
 painel de chips (um por modelo) que liga/desliga cada um da comparação. Só os
 marcados aparecem na grade de cards abaixo. Implementado como **lista de exclusão**
 (`SimplifiedInputs.modelosDesmarcados: string[]`), não de seleção — um modelo criado
-depois entra automaticamente mostrado, sem precisar atualizar nada. `sacada` começa
-nessa lista por padrão (fica desmarcada), porque não tem cálculo por m² de verdade
-(`valorM2` é `0`) — o usuário pode reativá-la a qualquer momento, inclusive sozinha
-(desmarcando todo o resto), pra orçá-la "solo" sem poluir a comparação — isso já é
-comportamento natural de chips independentes, não precisou de um modo "solo" à parte.
+depois entra automaticamente mostrado, sem precisar atualizar nada. `sacada`, `box` e
+`espelho` começam nessa lista por padrão (ficam desmarcados), porque nenhum tem cálculo
+por m² de verdade (`valorM2` é `0`) — o usuário pode reativar qualquer um a qualquer
+momento, inclusive sozinho (desmarcando todo o resto), pra orçá-lo "solo" sem poluir a
+comparação — isso já é comportamento natural de chips independentes, não precisou de um
+modo "solo" à parte. `MODELOS_SEM_M2_RETROATIVOS` (`lib/store.ts`) é a lista dos ids
+adicionados depois que já existiam usuários com rascunho salvo (hoje: `box`, `espelho`)
+— o `merge()` sempre os une ao array persistido, pra não aparecerem de surpresa pra
+quem já usava o Simplificado antes deles existirem (nunca reintroduz um id que o
+usuário já tenha reativado, porque não dá pra ter removido da lista algo que ainda não
+existia).
 
 ## 5. Persistência de Dados
 
@@ -295,7 +410,10 @@ Duas camadas **bem separadas** — não confundir:
   backfill de campos novos sem perder o que o usuário já tinha customizado. **Ao
   adicionar um campo novo a `ProjectInputs`/`SimplifiedInputs`/`Product`, sempre
   atualizar o `merge()` correspondente em `lib/store.ts`** — senão quem já tem dado
-  salvo local não ganha o campo novo.
+  salvo local não ganha o campo novo. O `merge()` de `useOrcamentoDetalhadoDraft` é o
+  mais delicado dos quatro: precisa reconhecer e migrar **dois** formatos antigos (o
+  "single-item" pré-carrinho, e o carrinho já existente mas sem campos novos de item) —
+  ver "Carrinho de Itens" na seção 4.
 
 ### Supabase Postgres (só orçamentos SALVOS de propósito, via botão "Salvar Orçamento")
 Tabela única `orcamentos` (schema em `supabase/schema.sql` + migrações incrementais em
@@ -311,8 +429,9 @@ orcamentos
 ├── nome_cliente   text  (cliente ou empresa)
 ├── total          numeric (custo total no Detalhado; null no Simplificado — compara
                     vários modelos, não tem "um" total)
-├── dados          jsonb  (ProjectInputs ou SimplifiedInputs completo — o suficiente pra
-                    recarregar o rascunho igualzinho ao abrir de novo)
+├── dados          jsonb  (OrcamentoDetalhadoDados — o carrinho inteiro, itens[] + RT do
+                    projeto — ou SimplifiedInputs completo, conforme `tipo`; o suficiente
+                    pra recarregar o rascunho igualzinho ao abrir de novo)
 └── criado_em      timestamptz
 ```
 
@@ -421,24 +540,82 @@ importantes:
 - Sem fluxo de "esqueci minha senha" na UI (reset é manual, pelo painel do Supabase).
 - Kits de Porta e os opcionais exclusivos da Sacada (ART, Caixa AC, Respiro) só existem
   no Detalhado — RT já foi estendida pros dois (ver seção 4). Não foi pedido estender o
-  resto ainda, mas é uma assimetria a considerar se pedirem.
-- `valorM2` da Sacada está com placeholder `0` — não é um preço real, só existe porque
-  todo `Modelo` precisa desse campo. Ela fica desmarcada por padrão no Comparador do
-  Simplificado por causa disso (ver seção 4), mas se o usuário reativá-la lá, o card dela
-  vai mostrar "Base: R$0" até alguém colocar um valorM2 de verdade em Modelos.
+  resto ainda, mas é uma assimetria a considerar se pedirem. Box e Espelho também só
+  existem no Detalhado (não têm `valorM2` real, ver abaixo) — mesma assimetria.
+- `valorM2` de Sacada, Box e Espelho está com placeholder `0` — não é um preço real, só
+  existe porque todo `Modelo` precisa desse campo. Os três ficam desmarcados por padrão
+  no Comparador do Simplificado por causa disso (ver seção 4), mas se o usuário
+  reativar algum lá, o card dele vai mostrar "Base: R$0" até alguém colocar um valorM2
+  de verdade em Modelos.
+- A migração do formato "single-item" pro "carrinho" (`useOrcamentoDetalhadoDraft.merge()`,
+  ver seção 4) assume `modeloId: "slim"` pro item migrado, porque o modelo antigo vivia
+  só no `useModeloStore` (fora do draft) e não dá pra recuperar com certeza no `merge()`.
+  Quem tinha um rascunho salvo com outro modelo (MiterGlass, Sacada...) precisa
+  reselecionar o modelo certo no item depois de abrir o app pela primeira vez após esta
+  mudança — não é automático. Não afeta orçamentos já **salvos** no Supabase (esses
+  guardam o payload antigo tal como foi salvo; só o rascunho local em andamento passa
+  por essa migração).
+- A regra "Se for Espelho 4mm pequeno, o valor base fixo é R$700/m²" do briefing original
+  foi interpretada como um exemplo ilustrativo da regra de área mínima (0,3m²), não como
+  uma faixa de preço própria — nenhuma `ProductKey` dedicada foi criada pra ela. Se a
+  intenção era outra (uma faixa de preço fixo separada pra espelhos 4mm pequenos),
+  avisar que precisa ser ajustado em `lib/calculators/espelho.ts`.
 - `supabase/migration_002_vendedor_codigo.sql` precisa ter sido rodada manualmente pelo
   usuário no Supabase pra "Meus Orçamentos" funcionar (colunas `codigo`/`nome_vendedor`).
 - **Nada que envolve renderização de tela foi verificado ao vivo desde que o login virou
   obrigatório** (Sacada, toggle Agrupado/Separado, isolamento dos opcionais da Sacada, RT
-  fixo/percentual nas duas calculadoras, Comparador Seletivo do Simplificado — tudo dos
-  últimos commits). Só dá pra validar por `tsc`/`eslint`/`build` (limpos) e testes
-  isolados da lógica pura (kits da Sacada, RT fixo/percentual — ambos batendo). Testar de
-  verdade na tela assim que existir uma conta.
+  fixo/percentual nas duas calculadoras, Comparador Seletivo do Simplificado, e agora o
+  Carrinho de itens + Box + Espelhos — tudo dos últimos commits). Só dá pra validar por
+  `tsc`/`eslint`/`build` (limpos) e testes isolados da lógica pura (kits da Sacada, RT
+  fixo/percentual, preços de Box, área mínima/junção do Espelho, agregação de RT do
+  carrinho sobre itens de modelos diferentes — todos batendo). Testar de verdade na tela
+  assim que existir uma conta.
 
 ## 10. Histórico de Mudanças
 
 > Entradas resumidas, mais recente primeiro. Não precisa repetir o que já está descrito
 > nas seções acima — só registrar o quê e (se não-óbvio) o porquê.
+
+- **2026-09-01** — Reforma "Carrinho" do Orçamento Detalhado + módulos Box Padrão e
+  Espelhos:
+  - `useOrcamentoDetalhadoDraft` deixou de guardar um único `inputs: ProjectInputs` e
+    passou a guardar `itens: ItemOrcamentoDetalhado[]` (cada um com `id`, `ambiente`,
+    `modeloId`, `inputs`) + `itemAtivoId` + `tipoRT`/`valorRT` do **projeto inteiro**
+    (RT saiu de dentro de `ProjectInputs` e subiu pro nível do draft/carrinho). Migração
+    do formato antigo tratada com cuidado no `merge()` — ver seção 4 ("Carrinho de
+    Itens") e seção 9 (Pendências) pro detalhe da limitação do `modeloId` migrado.
+  - `lib/useCalculator.ts` ganhou `calcularResumoCarrinho()`/`useResumoCarrinho()`, que
+    agregam todos os itens (cada um podendo usar um modelo/catálogo diferente) e só
+    então aplicam a RT do projeto uma única vez sobre a soma — `calcularOrcamento()` (um
+    item) não calcula mais RT nenhuma.
+  - **Regra de Ouro do arredondamento**: `calcularOrcamento()` agora aplica
+    `Math.round()` em cada `CalculoItem.subtotal` no próprio core, antes de agregar
+    `subtotalEstrutural`/`subtotalOpcionais`/`total` — não é mais só arredondamento na
+    exibição (`formatBRL`). `calcularResumoCarrinho()` arredonda também a RT do projeto.
+  - Dois modelos-semente novos, **Box Padrão** (`lib/calculators/box.ts`) e **Espelhos**
+    (`lib/calculators/espelho.ts`), ids reservados `"box"`/`"espelho"` — ambos com preço
+    fechado/por m² vindo do catálogo (nunca hardcoded), seguindo o mesmo padrão da
+    Sacada. Box: 16 `ProductKey` novas (8 medidas frontais × 2 formas de pagamento).
+    Espelho: 22 `ProductKey` novas (9 modelos base + 9 especiais + 4 adicionais), área
+    mínima cobrada de 0,3m², Modelo Especial anula o Base, +20% opcional de Junção/
+    Revestimento/Modelo sobre o subtotal base do vidro. Ambos isolados de
+    ferragens/opcionais universais de Divisória (mesmo isolamento já usado pela Sacada).
+    Total: 38 `ProductKey` novas, todas com backfill retroativo no `merge()` de
+    `useProductStore` e injetadas em todo modelo (mesmo padrão da Sacada).
+    `SimplifiedInputs.modelosDesmarcados` ganhou `box`/`espelho` como padrão desmarcado
+    (mesma razão da Sacada: sem `valorM2` real), com union retroativo no `merge()`.
+  - `ProjectCalculator.tsx` reescrito: card "Itens do Orçamento" (chips + adicionar/
+    remover item + trocar modelo/ambiente do item ativo), formulário condicional por
+    tipo de item (Vãos / Box / Espelho), "Resumo do Item Ativo" (Agrupado/Separado
+    escopado a um item) e "Total do Projeto" (RT do projeto + Total Geral + Salvar, que
+    salva o carrinho inteiro). `OrcamentosSalvos.tsx` atualizado pro novo
+    `OrcamentoDetalhadoDados` (era `ProjectInputs` direto).
+  - Validado por `tsc`/`eslint`/`build` (limpos) + script isolado (`tsx`) cobrindo preços
+    de Box (à vista/cartão, várias medidas), área mínima e Junção do Espelho, Modelo
+    Especial anulando o Base, arredondamento inteiro em todo item, e agregação de RT do
+    carrinho (fixo e percentual) sobre itens de **modelos diferentes** — todos batendo.
+    Servidor dev sobe sem erros e o proxy/DAL seguem redirecionando corretamente pra
+    `/login`; UI atrás do login segue não verificada ao vivo (ver Pendências).
 
 - **2026-08-28** — Isolamento dos opcionais da Sacada, RT Fixo/Porcentagem, e
   Comparador Seletivo no Simplificado:

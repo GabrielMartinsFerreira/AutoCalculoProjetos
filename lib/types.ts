@@ -21,13 +21,61 @@ export type ProductKey =
   | "kitSacada6m"
   | "artEngenheiro"
   | "caixaArCondicionado"
-  | "respiroAluminio";
+  | "respiroAluminio"
+  // Box Padrão — matriz de preço fechado por medida frontal × forma de pagamento.
+  | "box900Vista"
+  | "box900Cartao"
+  | "box1000Vista"
+  | "box1000Cartao"
+  | "box1200Vista"
+  | "box1200Cartao"
+  | "box1330Vista"
+  | "box1330Cartao"
+  | "box1500Vista"
+  | "box1500Cartao"
+  | "box1800Vista"
+  | "box1800Cartao"
+  | "box2000Vista"
+  | "box2000Cartao"
+  | "box2200Vista"
+  | "box2200Cartao"
+  // Espelhos — modelos base (material + acabamento), R$/m².
+  | "espelhoGuardian4mmLapidado"
+  | "espelhoGuardian4mmBizote"
+  | "espelhoGuardian4mmBizoteJuncao"
+  | "espelhoCebrace5mmLapidado"
+  | "espelhoCebrace5mmBizote"
+  | "espelhoCebrace6mmLapidado"
+  | "espelhoCebrace6mmBizote"
+  | "espelhoBronzeFume4mmLapidado"
+  | "espelhoBronzeFume4mmBizote"
+  // Espelhos — modelos especiais (preço fechado por m², anula o modelo base).
+  | "espelhoOrganicoComMoldura"
+  | "espelhoOrganico"
+  | "espelhoOrganicoComLed"
+  | "espelhoLedFrontal"
+  | "espelhoLedExpandido"
+  | "espelhoOvalComMoldura"
+  | "espelhoOvalSemMoldura"
+  | "espelhoCantoMoeda"
+  | "espelhoMeiaLuaComLed"
+  // Espelhos — adicionais/opcionais.
+  | "espelhoDesembacador"
+  | "espelhoRecorteCxLuz"
+  | "espelhoChassisPerfilU"
+  | "espelhoTouchScreen";
 
 /** Cor do vidro laminado da Sacada — só usado pelo modelo "sacada" (ver usaCorVidro). */
 export type CorVidroSacada = "incolor" | "verde";
 
 /** Reserva Técnica: valor fixo em R$, ou percentual sobre o total (antes da própria RT). */
 export type TipoRT = "fixo" | "percentual";
+
+/** Medida frontal do Box Padrão — restrita às opções da tabela de preços. */
+export type MedidaFrontalBox = "900" | "1000" | "1200" | "1330" | "1500" | "1800" | "2000" | "2200";
+
+/** Forma de pagamento do Box Padrão — cada uma tem sua própria coluna de preço na tabela. */
+export type TipoPagamentoBox = "vista" | "cartao";
 
 export interface Modelo {
   id: string;
@@ -57,6 +105,13 @@ export interface Vao {
   tipo: TipoVao;
 }
 
+/**
+ * Inputs de UM item do carrinho do Orçamento Detalhado. O mesmo formato serve pros três
+ * tipos de item (Divisória, Box, Espelho) — cada estratégia (lib/calculators) só lê os
+ * campos que lhe interessam, os demais ficam com o valor padrão e são ignorados. Isso
+ * evita um segundo formato de inputs por tipo, mantendo o Strategy pattern intacto (ver
+ * seção 4 do CLAUDE.md).
+ */
 export interface ProjectInputs {
   vaos: Vao[];
   qtdPuxadores: number;
@@ -69,14 +124,27 @@ export interface ProjectInputs {
   qtdKitPortaDupla: number;
   /** Cor do vidro da Sacada — só relevante quando o modelo selecionado usa (ver usaCorVidro). */
   corVidroSacada: CorVidroSacada;
-  /** Se "fixo", valorRT é um valor em R$; se "percentual", é uma porcentagem (0-100). */
-  tipoRT: TipoRT;
-  valorRT: number;
   /** Opcionais exclusivos da Sacada — só contam/aparecem quando o modelo é "sacada". */
   incluirArtEngenheiro: boolean;
   qtdCaixaArCondicionado: number;
   /** m² do respiro de alumínio — digitado manualmente, independente da área dos vãos. */
   m2RespiroAluminio: number;
+  /** Box Padrão — só usado quando o item do carrinho tem modeloId === "box". */
+  medidaFrontalBox: MedidaFrontalBox | null;
+  tipoPagamentoBox: TipoPagamentoBox;
+  /** Espelhos — só usado quando o item do carrinho tem modeloId === "espelho". */
+  larguraEspelho: number;
+  alturaEspelho: number;
+  /** Uma das chaves de MODELOS_BASE_ESPELHO (lib/calculators/espelho.ts), ou null. */
+  espelhoModeloBase: ProductKey | null;
+  /** Uma das chaves de MODELOS_ESPECIAIS_ESPELHO — quando definido, anula o modelo base. */
+  espelhoModeloEspecial: ProductKey | null;
+  incluirDesembacadorEspelho: boolean;
+  qtdRecorteCxLuzEspelho: number;
+  qtdChassisPerfilUEspelho: number;
+  qtdTouchScreenEspelho: number;
+  /** +20% sobre o subtotal base do vidro do espelho. */
+  incluirJuncaoRevestimentoEspelho: boolean;
 }
 
 export interface CalculoItem {
@@ -95,6 +163,29 @@ export interface ResultadoCalculo {
   subtotalEstrutural: number;
   /** Soma de itens com grupo "opcional" — "Subtotal de Opcionais" na UI. */
   subtotalOpcionais: number;
+}
+
+/**
+ * Um item do carrinho do Orçamento Detalhado: um ambiente/produto independente
+ * (Divisória de algum modelo, Box Padrão ou Espelho). `modeloId` decide a estratégia de
+ * cálculo (lib/calculators/index.ts) e qual catálogo de produtos é usado.
+ */
+export interface ItemOrcamentoDetalhado {
+  id: string;
+  ambiente: string;
+  modeloId: string;
+  inputs: ProjectInputs;
+}
+
+/**
+ * Payload completo do Orçamento Detalhado (rascunho no Zustand e `dados` salvo no
+ * Supabase) — um "carrinho" de itens + a Reserva Técnica do PROJETO INTEIRO (não mais
+ * por item, ver seção 4 do CLAUDE.md).
+ */
+export interface OrcamentoDetalhadoDados {
+  itens: ItemOrcamentoDetalhado[];
+  tipoRT: TipoRT;
+  valorRT: number;
 }
 
 export interface VaoSimples {
@@ -127,9 +218,9 @@ export interface SimplifiedInputs {
   /**
    * Ids de Modelo que o usuário desmarcou no Painel de Seleção (comparador seletivo) —
    * lista de EXCLUSÃO, não de seleção: um modelo novo (criado depois) aparece
-   * automaticamente, sem precisar atualizar essa lista. "sacada" começa aqui por
-   * padrão (não tem cálculo por m² de verdade — valorM2 é 0), mas o usuário pode
-   * reativá-la a qualquer momento, inclusive sozinha.
+   * automaticamente, sem precisar atualizar essa lista. "sacada", "box" e "espelho"
+   * começam aqui por padrão (nenhum tem cálculo por m² de verdade — valorM2 é 0), mas o
+   * usuário pode reativar qualquer um a qualquer momento, inclusive sozinho.
    */
   modelosDesmarcados: string[];
 }
@@ -167,5 +258,5 @@ export interface OrcamentoSalvoResumo {
 
 /** Orçamento salvo completo, com o payload pronto para recarregar no rascunho. */
 export interface OrcamentoSalvoDetalhe extends OrcamentoSalvoResumo {
-  dados: ProjectInputs | SimplifiedInputs;
+  dados: OrcamentoDetalhadoDados | SimplifiedInputs;
 }

@@ -2,8 +2,10 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { OPCIONAIS_PADRAO } from "./types";
 import type {
+  ItemOrcamentoDetalhado,
   Modelo,
   OpcionaisSimplificado,
+  OrcamentoDetalhadoDados,
   Product,
   ProductKey,
   ProjectInputs,
@@ -13,7 +15,7 @@ import type {
   VaoSimples,
 } from "./types";
 
-const SEED_MODELO_IDS = ["slim", "slim8mm", "miterglass", "blindglass", "sacada"];
+const SEED_MODELO_IDS = ["slim", "slim8mm", "miterglass", "blindglass", "sacada", "box", "espelho"];
 
 /**
  * Referência estável para "nenhum produto ainda". Nunca crie `[]` inline dentro de
@@ -185,6 +187,48 @@ const SEED_PRODUCTS: Product[] = [
     valor: 780,
     tipoVaoAssociado: null,
   },
+  // Box Padrão — matriz de preço fechado (medida frontal × forma de pagamento).
+  { id: "box900Vista", key: "box900Vista", nome: "Box 900mm Abrir — À Vista", unidade: "un", valor: 1070, tipoVaoAssociado: null },
+  { id: "box900Cartao", key: "box900Cartao", nome: "Box 900mm Abrir — Cartão", unidade: "un", valor: 1242, tipoVaoAssociado: null },
+  { id: "box1000Vista", key: "box1000Vista", nome: "Box 1000mm Correr 2 Pçs — À Vista", unidade: "un", valor: 1116, tipoVaoAssociado: null },
+  { id: "box1000Cartao", key: "box1000Cartao", nome: "Box 1000mm Correr 2 Pçs — Cartão", unidade: "un", valor: 1295, tipoVaoAssociado: null },
+  { id: "box1200Vista", key: "box1200Vista", nome: "Box 1200mm Correr 2 Pçs — À Vista", unidade: "un", valor: 1207, tipoVaoAssociado: null },
+  { id: "box1200Cartao", key: "box1200Cartao", nome: "Box 1200mm Correr 2 Pçs — Cartão", unidade: "un", valor: 1400, tipoVaoAssociado: null },
+  { id: "box1330Vista", key: "box1330Vista", nome: "Box 1330mm Correr 2 Pçs — À Vista", unidade: "un", valor: 1276, tipoVaoAssociado: null },
+  { id: "box1330Cartao", key: "box1330Cartao", nome: "Box 1330mm Correr 2 Pçs — Cartão", unidade: "un", valor: 1480, tipoVaoAssociado: null },
+  { id: "box1500Vista", key: "box1500Vista", nome: "Box 1500mm Correr 2 Pçs — À Vista", unidade: "un", valor: 1344, tipoVaoAssociado: null },
+  { id: "box1500Cartao", key: "box1500Cartao", nome: "Box 1500mm Correr 2 Pçs — Cartão", unidade: "un", valor: 1559, tipoVaoAssociado: null },
+  { id: "box1800Vista", key: "box1800Vista", nome: "Box 1800mm Correr 4 Pçs — À Vista", unidade: "un", valor: 1521, tipoVaoAssociado: null },
+  { id: "box1800Cartao", key: "box1800Cartao", nome: "Box 1800mm Correr 4 Pçs — Cartão", unidade: "un", valor: 1764, tipoVaoAssociado: null },
+  { id: "box2000Vista", key: "box2000Vista", nome: "Box 2000mm Correr 4 Pçs — À Vista", unidade: "un", valor: 1632, tipoVaoAssociado: null },
+  { id: "box2000Cartao", key: "box2000Cartao", nome: "Box 2000mm Correr 4 Pçs — Cartão", unidade: "un", valor: 1893, tipoVaoAssociado: null },
+  { id: "box2200Vista", key: "box2200Vista", nome: "Box 2200mm Correr 4 Pçs — À Vista", unidade: "un", valor: 1753, tipoVaoAssociado: null },
+  { id: "box2200Cartao", key: "box2200Cartao", nome: "Box 2200mm Correr 4 Pçs — Cartão", unidade: "un", valor: 2034, tipoVaoAssociado: null },
+  // Espelhos — modelos base (material + acabamento), R$/m².
+  { id: "espelhoGuardian4mmLapidado", key: "espelhoGuardian4mmLapidado", nome: "Espelho Guardian 4mm — Lapidado", unidade: "m²", valor: 500, tipoVaoAssociado: null },
+  { id: "espelhoGuardian4mmBizote", key: "espelhoGuardian4mmBizote", nome: "Espelho Guardian 4mm — Bizote", unidade: "m²", valor: 580, tipoVaoAssociado: null },
+  { id: "espelhoGuardian4mmBizoteJuncao", key: "espelhoGuardian4mmBizoteJuncao", nome: "Espelho Guardian 4mm — Bizote c/ Junção", unidade: "m²", valor: 700, tipoVaoAssociado: null },
+  { id: "espelhoCebrace5mmLapidado", key: "espelhoCebrace5mmLapidado", nome: "Espelho Cebrace 5mm — Lapidado", unidade: "m²", valor: 700, tipoVaoAssociado: null },
+  { id: "espelhoCebrace5mmBizote", key: "espelhoCebrace5mmBizote", nome: "Espelho Cebrace 5mm — Bizote", unidade: "m²", valor: 760, tipoVaoAssociado: null },
+  { id: "espelhoCebrace6mmLapidado", key: "espelhoCebrace6mmLapidado", nome: "Espelho Cebrace 6mm — Lapidado", unidade: "m²", valor: 800, tipoVaoAssociado: null },
+  { id: "espelhoCebrace6mmBizote", key: "espelhoCebrace6mmBizote", nome: "Espelho Cebrace 6mm — Bizote", unidade: "m²", valor: 870, tipoVaoAssociado: null },
+  { id: "espelhoBronzeFume4mmLapidado", key: "espelhoBronzeFume4mmLapidado", nome: "Espelho Bronze/Fumê 4mm — Lapidado", unidade: "m²", valor: 1090, tipoVaoAssociado: null },
+  { id: "espelhoBronzeFume4mmBizote", key: "espelhoBronzeFume4mmBizote", nome: "Espelho Bronze/Fumê 4mm — Bizote", unidade: "m²", valor: 1130, tipoVaoAssociado: null },
+  // Espelhos — modelos especiais (preço fechado por m², anula o modelo base).
+  { id: "espelhoOrganicoComMoldura", key: "espelhoOrganicoComMoldura", nome: "Espelho Orgânico c/ Moldura", unidade: "m²", valor: 1600, tipoVaoAssociado: null },
+  { id: "espelhoOrganico", key: "espelhoOrganico", nome: "Espelho Orgânico", unidade: "m²", valor: 1300, tipoVaoAssociado: null },
+  { id: "espelhoOrganicoComLed", key: "espelhoOrganicoComLed", nome: "Espelho Orgânico c/ Led", unidade: "m²", valor: 1800, tipoVaoAssociado: null },
+  { id: "espelhoLedFrontal", key: "espelhoLedFrontal", nome: "Espelho Led Frontal", unidade: "m²", valor: 1500, tipoVaoAssociado: null },
+  { id: "espelhoLedExpandido", key: "espelhoLedExpandido", nome: "Espelho Led Expandido", unidade: "m²", valor: 1200, tipoVaoAssociado: null },
+  { id: "espelhoOvalComMoldura", key: "espelhoOvalComMoldura", nome: "Espelho Oval c/ Moldura", unidade: "m²", valor: 1280, tipoVaoAssociado: null },
+  { id: "espelhoOvalSemMoldura", key: "espelhoOvalSemMoldura", nome: "Espelho Oval s/ Moldura", unidade: "m²", valor: 950, tipoVaoAssociado: null },
+  { id: "espelhoCantoMoeda", key: "espelhoCantoMoeda", nome: "Espelho Canto Moeda", unidade: "m²", valor: 560, tipoVaoAssociado: null },
+  { id: "espelhoMeiaLuaComLed", key: "espelhoMeiaLuaComLed", nome: "Espelho Meia Lua com Led", unidade: "m²", valor: 1300, tipoVaoAssociado: null },
+  // Espelhos — adicionais/opcionais.
+  { id: "espelhoDesembacador", key: "espelhoDesembacador", nome: "Desembaçador Elétrico (Espelho)", unidade: "m²", valor: 1620, tipoVaoAssociado: null },
+  { id: "espelhoRecorteCxLuz", key: "espelhoRecorteCxLuz", nome: "Recorte CX de Luz (Espelho)", unidade: "un", valor: 65, tipoVaoAssociado: null },
+  { id: "espelhoChassisPerfilU", key: "espelhoChassisPerfilU", nome: "Chassis Perfil U (Espelho)", unidade: "un", valor: 180, tipoVaoAssociado: null },
+  { id: "espelhoTouchScreen", key: "espelhoTouchScreen", nome: "Touch Screen (Espelho)", unidade: "un", valor: 200, tipoVaoAssociado: null },
 ];
 
 /**
@@ -205,6 +249,46 @@ const CHAVES_NOVAS_RETROATIVAS: ProductKey[] = [
   "artEngenheiro",
   "caixaArCondicionado",
   "respiroAluminio",
+  // Box Padrão e Espelhos (reforma "Carrinho") — injetados em todo modelo já existente,
+  // mesmo os que não usam (mesmo comportamento já aplicado às chaves da Sacada acima).
+  "box900Vista",
+  "box900Cartao",
+  "box1000Vista",
+  "box1000Cartao",
+  "box1200Vista",
+  "box1200Cartao",
+  "box1330Vista",
+  "box1330Cartao",
+  "box1500Vista",
+  "box1500Cartao",
+  "box1800Vista",
+  "box1800Cartao",
+  "box2000Vista",
+  "box2000Cartao",
+  "box2200Vista",
+  "box2200Cartao",
+  "espelhoGuardian4mmLapidado",
+  "espelhoGuardian4mmBizote",
+  "espelhoGuardian4mmBizoteJuncao",
+  "espelhoCebrace5mmLapidado",
+  "espelhoCebrace5mmBizote",
+  "espelhoCebrace6mmLapidado",
+  "espelhoCebrace6mmBizote",
+  "espelhoBronzeFume4mmLapidado",
+  "espelhoBronzeFume4mmBizote",
+  "espelhoOrganicoComMoldura",
+  "espelhoOrganico",
+  "espelhoOrganicoComLed",
+  "espelhoLedFrontal",
+  "espelhoLedExpandido",
+  "espelhoOvalComMoldura",
+  "espelhoOvalSemMoldura",
+  "espelhoCantoMoeda",
+  "espelhoMeiaLuaComLed",
+  "espelhoDesembacador",
+  "espelhoRecorteCxLuz",
+  "espelhoChassisPerfilU",
+  "espelhoTouchScreen",
 ];
 
 /**
@@ -332,6 +416,11 @@ const SEED_MODELOS: Modelo[] = [
   // cor + kit por largura, ver lib/calculators/sacada.ts), então esse número praticamente
   // não se aplica no Simplificado. Ajuste manual em Modelos se for usar a Sacada lá.
   { id: "sacada", nome: "Sacada", valorM2: 0 },
+  // Box e Espelho: mesma ressalva da Sacada acima — preço fechado (Box) ou por m² com
+  // regras próprias (Espelho), nenhum dos dois tem "preço por m² fechado" de verdade.
+  // Só existem no Orçamento Detalhado (ver lib/calculators/box.ts e espelho.ts).
+  { id: "box", nome: "Box Padrão", valorM2: 0 },
+  { id: "espelho", nome: "Espelhos", valorM2: 0 },
 ];
 
 interface ModeloStore {
@@ -398,7 +487,8 @@ export function criarVaoSimples(): VaoSimples {
   return { id: crypto.randomUUID(), largura: 1, altura: 2.1 };
 }
 
-const INPUTS_DETALHADO_INICIAL: ProjectInputs = {
+/** Inputs padrão de UM item novo do carrinho — vale pra Divisória, Box ou Espelho (ver ProjectInputs). */
+const INPUTS_ITEM_INICIAL: ProjectInputs = {
   vaos: [{ id: "vao-1", largura: 1, altura: 2.1, tipo: "Fixo" }],
   qtdPuxadores: 0,
   qtdFechaduras: 0,
@@ -409,52 +499,198 @@ const INPUTS_DETALHADO_INICIAL: ProjectInputs = {
   qtdKitPortaSimples: 0,
   qtdKitPortaDupla: 0,
   corVidroSacada: "incolor",
-  tipoRT: "fixo",
-  valorRT: 0,
   incluirArtEngenheiro: false,
   qtdCaixaArCondicionado: 0,
   m2RespiroAluminio: 0,
+  medidaFrontalBox: null,
+  tipoPagamentoBox: "vista",
+  larguraEspelho: 1,
+  alturaEspelho: 1,
+  espelhoModeloBase: null,
+  espelhoModeloEspecial: null,
+  incluirDesembacadorEspelho: false,
+  qtdRecorteCxLuzEspelho: 0,
+  qtdChassisPerfilUEspelho: 0,
+  qtdTouchScreenEspelho: 0,
+  incluirJuncaoRevestimentoEspelho: false,
 };
 
+function nomeItemPadrao(modeloId: string, indice: number) {
+  if (modeloId === "box") return `Box ${indice}`;
+  if (modeloId === "espelho") return `Espelho ${indice}`;
+  return `Item ${indice}`;
+}
+
+/** Versão dinâmica (id aleatório) — usada em ações do usuário (addItem, reset). */
+function criarItemCarrinho(modeloId = "slim", ambiente = "Item 1"): ItemOrcamentoDetalhado {
+  return {
+    id: crypto.randomUUID(),
+    ambiente,
+    modeloId,
+    inputs: { ...INPUTS_ITEM_INICIAL, vaos: [criarVaoPadrao()] },
+  };
+}
+
+/** Versão estática (id fixo) — segura pra rodar no carregamento do módulo (SSR incluso). */
+function criarItemCarrinhoInicial(): ItemOrcamentoDetalhado {
+  return {
+    id: "item-1",
+    ambiente: "Item 1",
+    modeloId: "slim",
+    inputs: { ...INPUTS_ITEM_INICIAL, vaos: [{ id: "vao-1", largura: 1, altura: 2.1, tipo: "Fixo" }] },
+  };
+}
+
+/**
+ * Rascunho do Orçamento Detalhado — desde a reforma "Carrinho" (2026-09-01), um
+ * projeto tem múltiplos itens independentes (Divisória/Box/Espelho), cada um com seu
+ * próprio modelo e inputs. A Reserva Técnica deixou de ser por item e passou a ser do
+ * PROJETO INTEIRO (tipoRT/valorRT aqui no nível do draft, não mais dentro de cada
+ * `inputs`) — ver `calcularResumoCarrinho` em lib/useCalculator.ts.
+ */
 interface OrcamentoDetalhadoDraftStore {
-  inputs: ProjectInputs;
-  setInputs: (inputs: ProjectInputs) => void;
-  addVao: () => void;
-  updateVao: (id: string, vao: Vao) => void;
-  removeVao: (id: string) => void;
+  itens: ItemOrcamentoDetalhado[];
+  itemAtivoId: string;
+  tipoRT: TipoRT;
+  valorRT: number;
+  addItem: (modeloId?: string) => void;
+  removeItem: (id: string) => void;
+  renomearItem: (id: string, ambiente: string) => void;
+  trocarModeloItem: (id: string, modeloId: string) => void;
+  selecionarItem: (id: string) => void;
+  setInputsItem: (id: string, inputs: ProjectInputs) => void;
+  addVaoItem: (id: string) => void;
+  updateVaoItem: (id: string, vaoId: string, vao: Vao) => void;
+  removeVaoItem: (id: string, vaoId: string) => void;
+  setRT: (tipoRT: TipoRT, valorRT: number) => void;
+  /** Substitui o carrinho inteiro — usado ao "Abrir" um orçamento salvo (Meus Orçamentos). */
+  setDraft: (dados: OrcamentoDetalhadoDados) => void;
   reset: () => void;
 }
 
 export const useOrcamentoDetalhadoDraft = create<OrcamentoDetalhadoDraftStore>()(
   persist(
     (set) => ({
-      inputs: INPUTS_DETALHADO_INICIAL,
-      setInputs: (inputs) => set({ inputs }),
-      addVao: () =>
+      itens: [criarItemCarrinhoInicial()],
+      itemAtivoId: "item-1",
+      tipoRT: "fixo",
+      valorRT: 0,
+      addItem: (modeloId = "slim") =>
+        set((state) => {
+          const novo = criarItemCarrinho(modeloId, nomeItemPadrao(modeloId, state.itens.length + 1));
+          return { itens: [...state.itens, novo], itemAtivoId: novo.id };
+        }),
+      removeItem: (id) =>
+        set((state) => {
+          if (state.itens.length <= 1) return state; // sempre sobra pelo menos 1 item
+          const itens = state.itens.filter((i) => i.id !== id);
+          const itemAtivoId = state.itemAtivoId === id ? itens[0].id : state.itemAtivoId;
+          return { itens, itemAtivoId };
+        }),
+      renomearItem: (id, ambiente) =>
+        set((state) => ({ itens: state.itens.map((i) => (i.id === id ? { ...i, ambiente } : i)) })),
+      trocarModeloItem: (id, modeloId) =>
+        set((state) => ({ itens: state.itens.map((i) => (i.id === id ? { ...i, modeloId } : i)) })),
+      selecionarItem: (id) => set({ itemAtivoId: id }),
+      setInputsItem: (id, inputs) =>
+        set((state) => ({ itens: state.itens.map((i) => (i.id === id ? { ...i, inputs } : i)) })),
+      addVaoItem: (id) =>
         set((state) => ({
-          inputs: { ...state.inputs, vaos: [...state.inputs.vaos, criarVaoPadrao()] },
+          itens: state.itens.map((i) =>
+            i.id === id ? { ...i, inputs: { ...i.inputs, vaos: [...i.inputs.vaos, criarVaoPadrao()] } } : i
+          ),
         })),
-      updateVao: (id, vao) =>
+      updateVaoItem: (id, vaoId, vao) =>
         set((state) => ({
-          inputs: { ...state.inputs, vaos: state.inputs.vaos.map((v) => (v.id === id ? vao : v)) },
+          itens: state.itens.map((i) =>
+            i.id === id
+              ? { ...i, inputs: { ...i.inputs, vaos: i.inputs.vaos.map((v) => (v.id === vaoId ? vao : v)) } }
+              : i
+          ),
         })),
-      removeVao: (id) =>
+      removeVaoItem: (id, vaoId) =>
         set((state) => ({
-          inputs: { ...state.inputs, vaos: state.inputs.vaos.filter((v) => v.id !== id) },
+          itens: state.itens.map((i) =>
+            i.id === id
+              ? { ...i, inputs: { ...i.inputs, vaos: i.inputs.vaos.filter((v) => v.id !== vaoId) } }
+              : i
+          ),
         })),
-      reset: () => set({ inputs: { ...INPUTS_DETALHADO_INICIAL, vaos: [criarVaoPadrao()] } }),
+      setRT: (tipoRT, valorRT) => set({ tipoRT, valorRT }),
+      setDraft: (dados) =>
+        set({
+          itens: dados.itens.length > 0 ? dados.itens : [criarItemCarrinho()],
+          itemAtivoId: dados.itens[0]?.id ?? "",
+          tipoRT: dados.tipoRT,
+          valorRT: dados.valorRT,
+        }),
+      reset: () => {
+        const novo = criarItemCarrinho();
+        set({ itens: [novo], itemAtivoId: novo.id, tipoRT: "fixo", valorRT: 0 });
+      },
     }),
     {
       name: "autocalculo-conceito:rascunho-detalhado",
       skipHydration: true,
-      // Rascunhos salvos antes do campo "Lã de Vidro" existir não o têm — preenche com o padrão.
+      // Rascunhos salvos antes da reforma "Carrinho" tinham um único `inputs` (sem
+      // array de itens, sem RT no nível do draft — RT vinha dentro do próprio inputs).
+      // Aqui migramos ambos os formatos com cuidado pra não perder nada já salvo.
       merge: (persisted, current) => {
-        const persistedState = persisted as { inputs?: Partial<ProjectInputs> } | undefined;
-        if (!persistedState?.inputs) return current;
-        return {
-          ...current,
-          inputs: { ...INPUTS_DETALHADO_INICIAL, ...persistedState.inputs },
-        };
+        const persistedState = persisted as
+          | {
+              itens?: ItemOrcamentoDetalhado[];
+              itemAtivoId?: string;
+              tipoRT?: TipoRT;
+              valorRT?: number;
+              inputs?: (Partial<ProjectInputs> & { tipoRT?: TipoRT; valorRT?: number }) | undefined;
+            }
+          | undefined;
+        if (!persistedState) return current;
+
+        // Já no formato de carrinho: backfill de campos novos em cada item (Box/Espelho,
+        // se ainda não existiam) sem perder nada do que já foi customizado.
+        if (Array.isArray(persistedState.itens)) {
+          const itens = persistedState.itens.map((item) => ({
+            ...item,
+            inputs: { ...INPUTS_ITEM_INICIAL, ...item.inputs },
+          }));
+          const itensFinal = itens.length > 0 ? itens : current.itens;
+          return {
+            ...current,
+            itens: itensFinal,
+            itemAtivoId:
+              persistedState.itemAtivoId && itensFinal.some((i) => i.id === persistedState.itemAtivoId)
+                ? persistedState.itemAtivoId
+                : itensFinal[0].id,
+            tipoRT: persistedState.tipoRT === "percentual" ? "percentual" : "fixo",
+            valorRT: typeof persistedState.valorRT === "number" ? persistedState.valorRT : 0,
+          };
+        }
+
+        // Formato antigo (pré-carrinho, "single-item"): o único `inputs` salvo vira o
+        // primeiro item da lista, e a RT que morava dentro dele sobe pro nível do draft.
+        // O modelo usado antigamente vivia só no useModeloStore (global, fora deste
+        // draft) — não dá pra recuperar com certeza aqui, então assume "slim" (era o
+        // padrão original da tela) como fallback; o usuário troca o modelo do item pelo
+        // seletor, se precisar.
+        if (persistedState.inputs) {
+          const antigo = persistedState.inputs;
+          const item: ItemOrcamentoDetalhado = {
+            id: "item-1",
+            ambiente: "Item 1",
+            modeloId: "slim",
+            inputs: { ...INPUTS_ITEM_INICIAL, ...antigo },
+          };
+          return {
+            ...current,
+            itens: [item],
+            itemAtivoId: item.id,
+            tipoRT: antigo.tipoRT === "percentual" ? "percentual" : "fixo",
+            valorRT: typeof antigo.valorRT === "number" ? antigo.valorRT : 0,
+          };
+        }
+
+        return current;
       },
     }
   )
@@ -465,10 +701,18 @@ const INPUTS_SIMPLIFICADO_INICIAL: SimplifiedInputs = {
   opcionaisPorModelo: {},
   tipoRT: "fixo",
   valorRT: 0,
-  // Sacada não tem cálculo por m² de verdade (valorM2 é placeholder 0) — fica de fora do
-  // comparador por padrão. Usuário pode reativá-la a qualquer momento no Painel de Seleção.
-  modelosDesmarcados: ["sacada"],
+  // Sacada, Box e Espelho não têm cálculo por m² de verdade (valorM2 é placeholder 0) —
+  // ficam de fora do comparador por padrão. Usuário pode reativar qualquer um a
+  // qualquer momento no Painel de Seleção.
+  modelosDesmarcados: ["sacada", "box", "espelho"],
 };
+
+/** Ids de modelo sem m² de verdade, adicionados depois de usuários já terem um rascunho
+ * salvo — sempre unidos ao array persistido no merge(), pra não aparecerem de surpresa
+ * no comparador de quem já usava o Simplificado antes deles existirem (mesmo raciocínio
+ * já aplicado à Sacada). Nunca reintroduz um id que o usuário já tenha reativado, porque
+ * não dá pra ter removido da lista algo que ainda não existia. */
+const MODELOS_SEM_M2_RETROATIVOS = ["box", "espelho"];
 
 interface OrcamentoSimplificadoDraftStore {
   inputs: SimplifiedInputs;
@@ -556,9 +800,14 @@ export const useOrcamentoSimplificadoDraft = create<OrcamentoSimplificadoDraftSt
 
         const tipoRT: TipoRT = raw.tipoRT === "percentual" ? "percentual" : "fixo";
         const valorRT = typeof raw.valorRT === "number" ? raw.valorRT : 0;
-        const modelosDesmarcados = Array.isArray(raw.modelosDesmarcados)
+        const modelosDesmarcadosBase = Array.isArray(raw.modelosDesmarcados)
           ? (raw.modelosDesmarcados as string[])
           : INPUTS_SIMPLIFICADO_INICIAL.modelosDesmarcados;
+        // Box/Espelho nunca podem ter sido removidos deliberadamente de uma lista que
+        // ainda não os conhecia — sempre seguro unir.
+        const modelosDesmarcados = Array.from(
+          new Set([...modelosDesmarcadosBase, ...MODELOS_SEM_M2_RETROATIVOS])
+        );
 
         return { ...current, inputs: { vaos, opcionaisPorModelo, tipoRT, valorRT, modelosDesmarcados } };
       },

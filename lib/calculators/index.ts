@@ -1,6 +1,8 @@
 import { estrategiaSlim } from "./slim";
 import { estrategiaMiterGlass } from "./miterglass";
 import { estrategiaSacada } from "./sacada";
+import { estrategiaBox } from "./box";
+import { estrategiaEspelho } from "./espelho";
 import type { EstrategiaCalculoModelo } from "./types";
 
 export type { EstrategiaCalculoModelo, GetValor } from "./types";
@@ -12,6 +14,8 @@ const ESTRATEGIAS: Record<string, EstrategiaCalculoModelo> = {
   slim8mm: estrategiaSlim,
   miterglass: estrategiaMiterGlass,
   sacada: estrategiaSacada,
+  box: estrategiaBox,
+  espelho: estrategiaEspelho,
 };
 
 /**

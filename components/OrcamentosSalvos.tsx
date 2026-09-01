@@ -4,7 +4,12 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FolderOpen, Layers3, Search, Trash2, Zap } from "lucide-react";
 import { useOrcamentoDetalhadoDraft, useOrcamentoSimplificadoDraft } from "@/lib/store";
-import type { OrcamentoSalvoDetalhe, OrcamentoSalvoResumo, ProjectInputs, SimplifiedInputs } from "@/lib/types";
+import type {
+  OrcamentoDetalhadoDados,
+  OrcamentoSalvoDetalhe,
+  OrcamentoSalvoResumo,
+  SimplifiedInputs,
+} from "@/lib/types";
 import { formatBRL } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -32,7 +37,7 @@ export function OrcamentosSalvos({
   const [carregandoId, setCarregandoId] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
   const router = useRouter();
-  const setInputsDetalhado = useOrcamentoDetalhadoDraft((s) => s.setInputs);
+  const setDraftDetalhado = useOrcamentoDetalhadoDraft((s) => s.setDraft);
   const setInputsSimplificado = useOrcamentoSimplificadoDraft((s) => s.setInputs);
 
   const itensFiltrados = useMemo(() => {
@@ -52,7 +57,7 @@ export function OrcamentosSalvos({
       if (!res.ok) throw new Error();
       const completo: OrcamentoSalvoDetalhe = await res.json();
       if (completo.tipo === "detalhado") {
-        setInputsDetalhado(completo.dados as ProjectInputs);
+        setDraftDetalhado(completo.dados as OrcamentoDetalhadoDados);
         router.push("/");
       } else {
         setInputsSimplificado(completo.dados as SimplifiedInputs);
