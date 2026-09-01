@@ -145,6 +145,15 @@ export interface ProjectInputs {
   qtdTouchScreenEspelho: number;
   /** +20% sobre o subtotal base do vidro do espelho. */
   incluirJuncaoRevestimentoEspelho: boolean;
+  /**
+   * Multiplicador de unidades idênticas — hoje só lido pelo Espelho (várias peças com
+   * mesma medida/acabamento num item só, em vez de um item por peça no carrinho).
+   * Opcional (com fallback pra 1 em todo lugar que lê) porque orçamentos salvos no
+   * Supabase antes desse campo existir não passam pelo merge() do Zustand ao serem
+   * reabertos — só rascunhos em localStorage passam. Outras estratégias (Slim,
+   * MiterGlass, Box...) simplesmente não leem este campo.
+   */
+  quantidade?: number;
 }
 
 export interface CalculoItem {

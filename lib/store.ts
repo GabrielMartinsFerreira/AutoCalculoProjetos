@@ -513,6 +513,7 @@ const INPUTS_ITEM_INICIAL: ProjectInputs = {
   qtdChassisPerfilUEspelho: 0,
   qtdTouchScreenEspelho: 0,
   incluirJuncaoRevestimentoEspelho: false,
+  quantidade: 1,
 };
 
 function nomeItemPadrao(modeloId: string, indice: number) {

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { EMPTY_PRODUCTS, useOrcamentoDetalhadoDraft, useProductStore } from "./store";
 import { obterEstrategia } from "./calculators";
-import { areaCobradaEspelho } from "./calculators/espelho";
+import { areaCobradaEspelho, quantidadeEspelho } from "./calculators/espelho";
 import type {
   CalculoItem,
   ItemOrcamentoDetalhado,
@@ -124,32 +124,44 @@ export function calcularOrcamento(
     );
   }
 
-  // Adicionais exclusivos do Espelho — mesmo padrão de isolamento da Sacada acima.
+  // Adicionais exclusivos do Espelho — mesmo padrão de isolamento da Sacada acima. Cada
+  // quantidade informada (qtdRecorteCxLuzEspelho etc.) é POR PEÇA de espelho — o total
+  // cobrado multiplica ainda pela quantidade de espelhos idênticos do item (mesma regra
+  // do subtotal estrutural em lib/calculators/espelho.ts). Math.round aplicado logo na
+  // multiplicação, explícito, mesmo já sendo redundante com o arredondamento central
+  // abaixo (Regra de Ouro) — garante zero centavos já na origem do valor multiplicado.
   if (modeloId === "espelho") {
+    const quantidadeEspelhos = quantidadeEspelho(inputs);
     const areaEspelho = areaCobradaEspelho(inputs);
     itens.push(
       {
         label: "Desembaçador Elétrico",
-        detalhe: inputs.incluirDesembacadorEspelho ? `${areaEspelho.toFixed(2)} m²` : "Não incluído",
-        subtotal: inputs.incluirDesembacadorEspelho ? areaEspelho * getValor("espelhoDesembacador") : 0,
+        detalhe: inputs.incluirDesembacadorEspelho
+          ? `${areaEspelho.toFixed(2)} m²/un × ${quantidadeEspelhos} un`
+          : "Não incluído",
+        subtotal: inputs.incluirDesembacadorEspelho
+          ? Math.round(areaEspelho * getValor("espelhoDesembacador") * quantidadeEspelhos)
+          : 0,
         grupo: "opcional",
       },
       {
         label: "Recorte CX de Luz",
-        detalhe: `${inputs.qtdRecorteCxLuzEspelho} un`,
-        subtotal: inputs.qtdRecorteCxLuzEspelho * getValor("espelhoRecorteCxLuz"),
+        detalhe: `${inputs.qtdRecorteCxLuzEspelho} un/espelho × ${quantidadeEspelhos} un = ${inputs.qtdRecorteCxLuzEspelho * quantidadeEspelhos} un`,
+        subtotal: Math.round(inputs.qtdRecorteCxLuzEspelho * getValor("espelhoRecorteCxLuz") * quantidadeEspelhos),
         grupo: "opcional",
       },
       {
         label: "Chassis Perfil U",
-        detalhe: `${inputs.qtdChassisPerfilUEspelho} peça(s)`,
-        subtotal: inputs.qtdChassisPerfilUEspelho * getValor("espelhoChassisPerfilU"),
+        detalhe: `${inputs.qtdChassisPerfilUEspelho} peça(s)/espelho × ${quantidadeEspelhos} un = ${inputs.qtdChassisPerfilUEspelho * quantidadeEspelhos} peça(s)`,
+        subtotal: Math.round(
+          inputs.qtdChassisPerfilUEspelho * getValor("espelhoChassisPerfilU") * quantidadeEspelhos
+        ),
         grupo: "opcional",
       },
       {
         label: "Touch Screen",
-        detalhe: `${inputs.qtdTouchScreenEspelho} peça(s)`,
-        subtotal: inputs.qtdTouchScreenEspelho * getValor("espelhoTouchScreen"),
+        detalhe: `${inputs.qtdTouchScreenEspelho} peça(s)/espelho × ${quantidadeEspelhos} un = ${inputs.qtdTouchScreenEspelho * quantidadeEspelhos} peça(s)`,
+        subtotal: Math.round(inputs.qtdTouchScreenEspelho * getValor("espelhoTouchScreen") * quantidadeEspelhos),
         grupo: "opcional",
       }
     );

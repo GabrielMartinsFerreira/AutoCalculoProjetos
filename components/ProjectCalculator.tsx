@@ -359,7 +359,7 @@ export function ProjectCalculator() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                   <div className="flex flex-col gap-1">
                     <Label>Largura (m)</Label>
                     <Input
@@ -382,7 +382,20 @@ export function ProjectCalculator() {
                       className="font-mono"
                     />
                   </div>
-                  <div className="flex flex-col gap-1 sm:col-span-2">
+                  <div className="flex flex-col gap-1">
+                    <Label>Quantidade (un)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={itemAtivo.inputs.quantidade ?? 1}
+                      onChange={(e) => atualizarInputsAtivo({ quantidade: Number(e.target.value) })}
+                      className="font-mono"
+                      title="Espelhos idênticos (mesma medida/acabamento) cotados neste item"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1">
                     <Label>Modelo Base</Label>
                     <Select
                       value={itemAtivo.inputs.espelhoModeloBase ?? ""}
@@ -400,7 +413,7 @@ export function ProjectCalculator() {
                       ))}
                     </Select>
                   </div>
-                  <div className="flex flex-col gap-1 sm:col-span-2">
+                  <div className="flex flex-col gap-1">
                     <Label>Modelo Especial (opcional — anula o Modelo Base)</Label>
                     <Select
                       value={itemAtivo.inputs.espelhoModeloEspecial ?? ""}

@@ -38,14 +38,30 @@ export const MODELOS_ESPECIAIS_ESPELHO: OpcaoModeloEspelho[] = [
 /**
  * Área efetivamente cobrada (aplica o piso de AREA_MINIMA_M2) — usada tanto pro vidro em
  * si quanto pelo Desembaçador Elétrico (também R$/m², ver lib/useCalculator.ts), pra
- * manter uma única noção de "área faturável" do espelho.
+ * manter uma única noção de "área faturável" do espelho. É a área de UMA peça — a
+ * quantidade (ver `quantidadeEspelho` abaixo) multiplica por fora, não altera o piso.
  */
 export function areaCobradaEspelho(inputs: Pick<ProjectInputs, "larguraEspelho" | "alturaEspelho">) {
   return Math.max(inputs.larguraEspelho * inputs.alturaEspelho, AREA_MINIMA_M2);
 }
 
+/**
+ * Quantidade de espelhos idênticos (mesma medida/acabamento) representados por este
+ * item — multiplicador de unidades, pra cotar várias peças iguais num item só do
+ * carrinho em vez de duplicar o item várias vezes. Sempre >= 1 (inteiro): ausente,
+ * zerado, negativo ou fracionário (dado antigo sem o campo, ou edição inválida na UI)
+ * cai pro mínimo de 1 peça. Exportada porque lib/useCalculator.ts usa o mesmo piso pros
+ * adicionais do espelho (Desembaçador/Recorte/Chassis/Touch Screen), que também são
+ * "por peça" e precisam ser multiplicados pela mesma quantidade.
+ */
+export function quantidadeEspelho(inputs: Pick<ProjectInputs, "quantidade">): number {
+  return Math.max(1, Math.round(inputs.quantidade ?? 1));
+}
+
 function calcularEstrutura(inputs: ProjectInputs, getValor: GetValor): CalculoItem[] {
+  const quantidade = quantidadeEspelho(inputs);
   const areaReal = inputs.larguraEspelho * inputs.alturaEspelho;
+  // Piso de 0,3m² avaliado POR UNIDADE — a quantidade multiplica depois, não infla o piso.
   const areaCobrada = areaCobradaEspelho(inputs);
   const areaForcada = areaCobrada > areaReal;
 
@@ -66,25 +82,34 @@ function calcularEstrutura(inputs: ProjectInputs, getValor: GetValor): CalculoIt
   }
 
   const valorM2 = getValor(opcaoEscolhida.key);
-  const subtotalBase = areaCobrada * valorM2;
+  const subtotalUnitario = areaCobrada * valorM2;
+  // Regra de Ouro: a multiplicação pela quantidade é onde frações de centavo podem
+  // reaparecer (preço/m² com decimais × área × N peças) — arredonda aqui, explicitamente,
+  // antes de somar ao total (redundante com o arredondamento central de
+  // lib/useCalculator.ts sobre todo CalculoItem.subtotal, mas intencional: garante zero
+  // centavos já na origem do valor multiplicado, não só na agregação final).
+  const subtotalBaseTotal = Math.round(subtotalUnitario * quantidade);
+  const valorUnitarioFmt = subtotalUnitario.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const valorM2Fmt = valorM2.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
   const itens: CalculoItem[] = [
     {
       label: `Espelho — ${opcaoEscolhida.label}${especial ? " (modelo especial)" : ""}`,
-      detalhe: `${areaReal.toFixed(2)} m²${areaForcada ? ` → mínimo cobrado ${AREA_MINIMA_M2.toFixed(2)} m²` : ""} × ${valorM2.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}/m²`,
-      subtotal: subtotalBase,
+      detalhe: `${quantidade} un × ${valorUnitarioFmt} (${areaReal.toFixed(2)} m²${areaForcada ? ` → mín. ${AREA_MINIMA_M2.toFixed(2)} m²/un` : ""} × ${valorM2Fmt}/m²)`,
+      subtotal: subtotalBaseTotal,
       grupo: "estrutural",
     },
   ];
 
-  // Junção/Revestimento/Modelo: +20% sobre o subtotal base do vidro (antes dos
-  // adicionais avulsos como desembaçador/recorte/chassis/touch, que são hardware
-  // itemizado à parte — ver lib/useCalculator.ts).
+  // Junção/Revestimento/Modelo: +20% sobre o subtotal base do vidro JÁ multiplicado
+  // pela quantidade (matematicamente igual a aplicar por unidade e depois multiplicar)
+  // — não incide sobre os adicionais avulsos abaixo (são hardware itemizado à parte,
+  // ver lib/useCalculator.ts).
   if (inputs.incluirJuncaoRevestimentoEspelho) {
     itens.push({
       label: "Junção / Revestimento / Modelo (+20%)",
-      detalhe: `+20% sobre ${subtotalBase.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`,
-      subtotal: subtotalBase * 0.2,
+      detalhe: `+20% sobre ${subtotalBaseTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} (${quantidade} un já considerada)`,
+      subtotal: Math.round(subtotalBaseTotal * 0.2),
       grupo: "estrutural",
     });
   }

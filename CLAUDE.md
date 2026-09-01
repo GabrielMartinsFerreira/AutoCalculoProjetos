@@ -589,6 +589,47 @@ importantes:
 > Entradas resumidas, mais recente primeiro. Não precisa repetir o que já está descrito
 > nas seções acima — só registrar o quê e (se não-óbvio) o porquê.
 
+- **2026-09-01** — Multiplicador de Quantidade no modelo Espelhos:
+  - `ProjectInputs` ganhou `quantidade?: number` (opcional, fallback pra 1 em todo lugar
+    que lê) — hoje só usado pelo Espelho, pra cotar N peças idênticas (mesma medida e
+    acabamento) num item só do carrinho, em vez de duplicar o item várias vezes. Campo
+    opcional de propósito: orçamentos abertos de "Meus Orçamentos" (Supabase) chamam
+    `setDraft()` direto, sem passar pelo `merge()` do Zustand — então um payload salvo
+    antes desse campo existir também precisa de um fallback seguro em runtime, não só no
+    merge do localStorage.
+  - `lib/store.ts`: `INPUTS_ITEM_INICIAL` ganhou `quantidade: 1` — como o `merge()` de
+    `useOrcamentoDetalhadoDraft` já fazia (e continua fazendo) um spread genérico
+    `{ ...INPUTS_ITEM_INICIAL, ...inputsPersistidos }` pra qualquer item antigo, isso já
+    era suficiente pra backfillar `quantidade: 1` em rascunhos salvos no localStorage
+    antes desse campo existir — nenhuma lógica nova de merge precisou ser escrita, só o
+    valor padrão novo no objeto que o merge já espalha.
+  - `lib/calculators/espelho.ts`: novo helper `quantidadeEspelho(inputs)` (exportado,
+    sempre inteiro ≥ 1 — corrige/arredonda valor ausente, zerado, negativo ou
+    fracionário). O subtotal estrutural (vidro base + Junção/Revestimento +20%) agora é
+    `Math.round(subtotalUnitário × quantidade)`, com `detalhe` explícito no formato
+    "N un × R$X (área × R$/m²)". A área mínima de 0,3m² continua avaliada POR UNIDADE
+    (`areaCobradaEspelho`, inalterada) — a quantidade multiplica por fora, não infla o
+    piso de nenhuma peça individual.
+  - `lib/useCalculator.ts`: o bloco de Adicionais do Espelho (Desembaçador, Recorte CX
+    de Luz, Chassis Perfil U, Touch Screen) também passou a multiplicar pela mesma
+    `quantidadeEspelho(inputs)` — cada quantidade informada nesses campos já era "por
+    peça de espelho" (ex.: "2 recortes"), então o total cobrado é
+    `(valorUnitário × qtdInformada) × quantidadeDeEspelhos`, com `Math.round` aplicado
+    na própria multiplicação (redundante com o arredondamento central de todo
+    `CalculoItem.subtotal` que já existe ali, mas explícito de propósito). Esse arquivo
+    precisou ser tocado porque os Adicionais do Espelho são calculados nele, não em
+    `espelho.ts` (mesma separação estrutural/opcional já documentada na seção 4) — só o
+    bloco `if (modeloId === "espelho")` foi alterado, nenhuma outra estratégia é afetada.
+  - UI (`ProjectCalculator.tsx`): novo campo "Quantidade (un)" no card "Espelho", ao
+    lado de Largura/Altura (grid próprio, `min={1}`).
+  - Validado por `tsc`/`eslint`/`build` (limpos) + script isolado (`tsx`) reproduzindo o
+    exemplo de referência do briefing (3 espelhos de R$500 → R$1500, detalhe "3 un ×
+    R$500,00"), quantidade ausente/zerada/negativa caindo pro piso de 1, opcionais por
+    unidade multiplicados corretamente (2 recortes/espelho × 3 espelhos = 6 un), área do
+    Desembaçador multiplicada pela quantidade, arredondamento inteiro em todo subtotal
+    afetado, e o backfill do `merge()` simulado sobre um item sem o campo — todos
+    batendo.
+
 - **2026-09-01** — Correção do cálculo do Tubo 2x2 no modelo Slim
   (`lib/calculators/slim.ts`): a fórmula antiga somava as metragens linearmente e
   dividia por 6m (`Math.ceil(metragemTotal / 6)`), o que presume emendas/junções
