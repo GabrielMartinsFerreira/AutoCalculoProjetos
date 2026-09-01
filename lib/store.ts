@@ -15,7 +15,7 @@ import type {
   VaoSimples,
 } from "./types";
 
-const SEED_MODELO_IDS = ["slim", "slim8mm", "miterglass", "blindglass", "sacada", "box", "espelho"];
+const SEED_MODELO_IDS = ["slim", "slim8mm", "miterglass", "blindglass", "sacada", "box", "boxFlex", "espelho"];
 
 /**
  * Referência estável para "nenhum produto ainda". Nunca crie `[]` inline dentro de
@@ -416,10 +416,12 @@ const SEED_MODELOS: Modelo[] = [
   // cor + kit por largura, ver lib/calculators/sacada.ts), então esse número praticamente
   // não se aplica no Simplificado. Ajuste manual em Modelos se for usar a Sacada lá.
   { id: "sacada", nome: "Sacada", valorM2: 0 },
-  // Box e Espelho: mesma ressalva da Sacada acima — preço fechado (Box) ou por m² com
-  // regras próprias (Espelho), nenhum dos dois tem "preço por m² fechado" de verdade.
-  // Só existem no Orçamento Detalhado (ver lib/calculators/box.ts e espelho.ts).
+  // Box, Box Flex e Espelho: mesma ressalva da Sacada acima — preço fechado (Box),
+  // fórmula proprietária própria (Box Flex) ou por m² com regras próprias (Espelho),
+  // nenhum tem "preço por m² fechado" de verdade. Só existem no Orçamento Detalhado
+  // (ver lib/calculators/box.ts, boxFlex.ts e espelho.ts).
   { id: "box", nome: "Box Padrão", valorM2: 0 },
+  { id: "boxFlex", nome: "Box Flex", valorM2: 0 },
   { id: "espelho", nome: "Espelhos", valorM2: 0 },
 ];
 
@@ -514,6 +516,9 @@ const INPUTS_ITEM_INICIAL: ProjectInputs = {
   qtdTouchScreenEspelho: 0,
   incluirJuncaoRevestimentoEspelho: false,
   quantidade: 1,
+  larguraBoxFlex: 1,
+  alturaBoxFlex: 1,
+  dobradicaAvulsa: false,
 };
 
 function nomeItemPadrao(modeloId: string, indice: number) {
@@ -705,7 +710,7 @@ const INPUTS_SIMPLIFICADO_INICIAL: SimplifiedInputs = {
   // Sacada, Box e Espelho não têm cálculo por m² de verdade (valorM2 é placeholder 0) —
   // ficam de fora do comparador por padrão. Usuário pode reativar qualquer um a
   // qualquer momento no Painel de Seleção.
-  modelosDesmarcados: ["sacada", "box", "espelho"],
+  modelosDesmarcados: ["sacada", "box", "boxFlex", "espelho"],
 };
 
 /** Ids de modelo sem m² de verdade, adicionados depois de usuários já terem um rascunho
@@ -713,7 +718,7 @@ const INPUTS_SIMPLIFICADO_INICIAL: SimplifiedInputs = {
  * no comparador de quem já usava o Simplificado antes deles existirem (mesmo raciocínio
  * já aplicado à Sacada). Nunca reintroduz um id que o usuário já tenha reativado, porque
  * não dá pra ter removido da lista algo que ainda não existia. */
-const MODELOS_SEM_M2_RETROATIVOS = ["box", "espelho"];
+const MODELOS_SEM_M2_RETROATIVOS = ["box", "boxFlex", "espelho"];
 
 interface OrcamentoSimplificadoDraftStore {
   inputs: SimplifiedInputs;

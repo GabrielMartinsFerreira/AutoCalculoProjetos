@@ -112,8 +112,9 @@ export function ProjectCalculator() {
   const mostrarTipoVao = estrategiaAtiva.usaTipoVao || temProdutoVinculado;
 
   const isBox = itemAtivo.modeloId === "box";
+  const isBoxFlex = itemAtivo.modeloId === "boxFlex";
   const isEspelho = itemAtivo.modeloId === "espelho";
-  const isDivisoria = !isBox && !isEspelho;
+  const isDivisoria = !isBox && !isBoxFlex && !isEspelho;
 
   const [mostrarSalvar, setMostrarSalvar] = useState(false);
   const [mostrarAdicionar, setMostrarAdicionar] = useState(false);
@@ -346,6 +347,62 @@ export function ProjectCalculator() {
                     {formatBRL(resultadoAtivo.subtotalEstrutural)}
                   </p>
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {isBoxFlex && (
+            <Card className="reveal" style={{ animationDelay: "40ms" }}>
+              <CardHeader>
+                <CardTitle>Box Flex</CardTitle>
+                <CardDescription>
+                  Fórmula proprietária: vidro por m² + custo fixo (kit, silicone, lucro) + taxa de 15% (NF/Cartão)
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4">
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                  <div className="flex flex-col gap-1">
+                    <Label>Largura (m)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      value={itemAtivo.inputs.larguraBoxFlex}
+                      onChange={(e) => atualizarInputsAtivo({ larguraBoxFlex: Number(e.target.value) })}
+                      className="font-mono"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label>Altura (m)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      value={itemAtivo.inputs.alturaBoxFlex}
+                      onChange={(e) => atualizarInputsAtivo({ alturaBoxFlex: Number(e.target.value) })}
+                      className="font-mono"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label>Quantidade (un)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={itemAtivo.inputs.quantidade ?? 1}
+                      onChange={(e) => atualizarInputsAtivo({ quantidade: Number(e.target.value) })}
+                      className="font-mono"
+                    />
+                  </div>
+                </div>
+                <label className="flex items-center gap-2">
+                  <Checkbox
+                    checked={itemAtivo.inputs.dobradicaAvulsa}
+                    onChange={(e) => atualizarInputsAtivo({ dobradicaAvulsa: e.target.checked })}
+                  />
+                  <span className="text-sm text-zinc-700 dark:text-zinc-300">
+                    Até o teto - Inclui Dobradiça Avulsa
+                  </span>
+                </label>
               </CardContent>
             </Card>
           )}

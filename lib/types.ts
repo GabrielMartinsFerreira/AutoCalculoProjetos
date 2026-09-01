@@ -146,14 +146,25 @@ export interface ProjectInputs {
   /** +20% sobre o subtotal base do vidro do espelho. */
   incluirJuncaoRevestimentoEspelho: boolean;
   /**
-   * Multiplicador de unidades idênticas — hoje só lido pelo Espelho (várias peças com
-   * mesma medida/acabamento num item só, em vez de um item por peça no carrinho).
-   * Opcional (com fallback pra 1 em todo lugar que lê) porque orçamentos salvos no
-   * Supabase antes desse campo existir não passam pelo merge() do Zustand ao serem
-   * reabertos — só rascunhos em localStorage passam. Outras estratégias (Slim,
-   * MiterGlass, Box...) simplesmente não leem este campo.
+   * Multiplicador de unidades idênticas — lido pelo Espelho e pelo Box Flex (várias
+   * peças com mesma medida/acabamento num item só, em vez de um item por peça no
+   * carrinho). Opcional (com fallback pra 1 em todo lugar que lê) porque orçamentos
+   * salvos no Supabase antes desse campo existir não passam pelo merge() do Zustand ao
+   * serem reabertos — só rascunhos em localStorage passam. Outras estratégias (Slim,
+   * MiterGlass, Box Padrão...) simplesmente não leem este campo.
    */
   quantidade?: number;
+  /**
+   * Box Flex — só usado quando o item do carrinho tem modeloId === "boxFlex". Fórmula
+   * proprietária totalmente separada do Box Padrão (custo fixo + lucro embutido + taxa
+   * de 15%, ver lib/calculators/boxFlex.ts) — os valores da fórmula são constantes fixas
+   * na estratégia, não vêm do catálogo de produtos (única exceção nesse sentido no
+   * sistema; todo o resto é editável via Cadastro de Produtos).
+   */
+  larguraBoxFlex: number;
+  alturaBoxFlex: number;
+  /** "Até o teto - Inclui Dobradiça Avulsa" — soma R$550 fixos quando marcado. */
+  dobradicaAvulsa: boolean;
 }
 
 export interface CalculoItem {

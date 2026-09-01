@@ -96,6 +96,7 @@ lib/
     miterglass.ts                Fórmula MiterGlass (modulada em peças de ~1m)
     sacada.ts                    Fórmula Sacada (vidro por cor + kit combinado por largura)
     box.ts                       Fórmula Box Padrão (preço fechado: medida frontal × pagamento)
+    boxFlex.ts                   Fórmula Box Flex (m² + custo fixo + lucro + taxa 15%, sem catálogo)
     espelho.ts                   Fórmula Espelhos (m² com piso de 0,3m², modelo base/especial)
     index.ts                     obterEstrategia(modeloId) — fallback pra Slim se não mapeado
   dal.ts                        getUsuarioLogado() — única fonte de verdade sobre sessão
@@ -172,31 +173,34 @@ Um módulo/abertura da divisória: `largura`, `altura`, e (no Detalhado) um `tip
 contribui pra área de vidro e pro cálculo estrutural. O Simplificado usa `VaoSimples`
 (só largura/altura, sem tipo — o preço é por m² fechado, não importa o tipo).
 
-### Modelo (Divisória Slim / Slim 8mm / MiterGlass / BlindGlass / Sacada / Box Padrão / Espelhos)
+### Modelo (Divisória Slim / Slim 8mm / MiterGlass / BlindGlass / Sacada / Box Padrão / Box Flex / Espelhos)
 Cada modelo tem:
 - Sua **própria fórmula estrutural** (Strategy pattern, `lib/calculators/`) — como
-  vidro/perfis/tubos (ou preço fechado, no caso do Box) são calculados a partir dos
-  inputs do item.
+  vidro/perfis/tubos (ou preço fechado/composto, no caso do Box e do Box Flex) são
+  calculados a partir dos inputs do item.
 - Seu **próprio catálogo de produtos**, totalmente independente dos outros modelos
   (`useProductStore.productsByModelo[modeloId]`). Editar o preço da fechadura no Slim
   NUNCA afeta o preço da fechadura no MiterGlass. Um modelo novo criado pelo usuário
-  nasce com catálogo vazio.
-- Seu **valorM2** (usado só no Simplificado — Sacada, Box e Espelho têm isso como
-  placeholder `0`, já que nenhum dos três é precificado por m² fechado, ver seções
-  abaixo).
+  nasce com catálogo vazio. **Exceção: Box Flex não lê o catálogo nenhum** — sua fórmula
+  usa constantes fixas no código, ver "Fórmula Box Flex" abaixo; o catálogo dele em
+  Cadastro de Produtos existe (herda as chaves genéricas do seed) mas é decorativo.
+- Seu **valorM2** (usado só no Simplificado — Sacada, Box, Box Flex e Espelho têm isso
+  como placeholder `0`, já que nenhum é precificado por m² fechado, ver seções abaixo).
 
 Modelos-semente (`SEED_MODELO_IDS` em `lib/store.ts`): `slim`, `slim8mm`, `miterglass`,
-`blindglass`, `sacada`, `box`, `espelho`. Usuário pode criar modelos novos livremente
-(`ModeloCatalog.tsx`) — esses caem na estratégia de cálculo da Slim por padrão
-(`obterEstrategia` faz fallback), até ganharem fórmula própria. **Importante**: pra uma
-estratégia nova ficar de fato vinculada a um modelo, o `id` do modelo tem que bater
-literalmente com a chave usada em `ESTRATEGIAS` (`lib/calculators/index.ts`) — um modelo
-criado manualmente pela UI ganha um `crypto.randomUUID()` como id, então nunca vai casar
-sozinho com uma estratégia nova. É por isso que Sacada, Box e Espelho foram adicionados
-como modelos-semente (ids fixos `"sacada"`/`"box"`/`"espelho"`), não como algo que o
-usuário criaria à mão. `"box"` e `"espelho"` também são tratados como ids **reservados**
-pelo carrinho do Detalhado — é assim que um item sabe renderizar o formulário certo (ver
-"Carrinho de Itens" acima).
+`blindglass`, `sacada`, `box`, `boxFlex`, `espelho`. Usuário pode criar modelos novos
+livremente (`ModeloCatalog.tsx`) — esses caem na estratégia de cálculo da Slim por
+padrão (`obterEstrategia` faz fallback), até ganharem fórmula própria. **Importante**:
+pra uma estratégia nova ficar de fato vinculada a um modelo, o `id` do modelo tem que
+bater literalmente com a chave usada em `ESTRATEGIAS` (`lib/calculators/index.ts`) — um
+modelo criado manualmente pela UI ganha um `crypto.randomUUID()` como id, então nunca vai
+casar sozinho com uma estratégia nova. É por isso que Sacada, Box, Box Flex e Espelho
+foram adicionados como modelos-semente (ids fixos `"sacada"`/`"box"`/`"boxFlex"`/
+`"espelho"`), não como algo que o usuário criaria à mão. `"box"`, `"boxFlex"` e
+`"espelho"` também são tratados como ids **reservados** pelo carrinho do Detalhado — é
+assim que um item sabe renderizar o formulário certo (ver "Carrinho de Itens" acima).
+**Box Flex é intencionalmente separado do Box Padrão** — ids, estratégias, catálogos e
+fórmulas totalmente independentes, apesar do nome parecido; nunca compartilham código.
 
 ### Estratégia de cálculo (Strategy pattern)
 `lib/calculators/index.ts` mapeia `modeloId → EstrategiaCalculoModelo`. Cada estratégia:
@@ -279,6 +283,30 @@ medida→(keyVista, keyCartao) — usado tanto pelo cálculo quanto pelo dropdow
 Box **não tem ferragens/opcionais universais** (puxador, fechadura, kits de porta...) —
 só o preço de tabela, isolado exatamente como os opcionais da Sacada (ver
 `lib/useCalculator.ts`, `ehItemFechado`).
+
+**Fórmula Box Flex (`lib/calculators/boxFlex.ts`)** — não usa vãos nem tipo de vão
+(`usaTipoVao: false`, `usaCorVidro: false`); recebe `inputs.larguraBoxFlex`/
+`.alturaBoxFlex` (um par só, como o Espelho) e `inputs.dobradicaAvulsa` (checkbox "Até o
+teto - Inclui Dobradiça Avulsa"). **Totalmente separada do Box Padrão** — fórmula
+proprietária de composição de custo, não preço de tabela por medida. Reaproveita
+`inputs.quantidade` (mesmo campo do Espelho) como multiplicador de unidades idênticas.
+- **Cascata fixa, nessa ordem exata**: `custoVidro = m² × R$180/m²` (m² = largura ×
+  altura) → soma **Custo Fixo** de R$2.630 (Kit Padrão R$1.300 + Silicone R$30 + Lucro
+  Operacional R$1.300, uma constante única, não 3 linhas separadas) → soma Dobradiça
+  Avulsa se marcada (+R$550) → isso é o subtotal de UMA unidade → multiplica pela
+  `quantidade` → **arredonda** (`Math.round`) esse subtotal geral → só então aplica a
+  **Taxa NF e Cartão de 15%** sobre esse valor já redondo → total = subtotal geral + taxa.
+  A ordem importa: a taxa incide sobre o subtotal geral (já multiplicado pela
+  quantidade), nunca sobre o valor de uma unidade isolada.
+- **Única estratégia do sistema que não usa `getValor`/catálogo** — os 4 números da
+  fórmula (R$180, R$2.630, R$550, 15%) são constantes fixas em `boxFlex.ts`, decisão
+  explícita (valores não editáveis pelo usuário comum). Nenhuma `ProductKey` nova existe
+  pra ela.
+- 4 `CalculoItem` sempre expostos no resumo (transparência pro vendedor): "Vidro Box
+  Flex", "Kit Padrão, Silicone e Lucro", "Dobradiça Avulsa" (só se marcada) e "Taxa NF e
+  Cartão (15%)" — todos `grupo: "estrutural"`, mesmo isolamento de ferragens/opcionais
+  universais do Box Padrão (`ehItemFechado` em `lib/useCalculator.ts`). Quando
+  `quantidade > 1`, cada `detalhe` avisa "já multiplicado por N un".
 
 **Fórmula Espelhos (`lib/calculators/espelho.ts`)** — não usa vãos nem tipo de vão
 (`usaTipoVao: false`, `usaCorVidro: false`); recebe `inputs.larguraEspelho` /
@@ -588,6 +616,53 @@ importantes:
 
 > Entradas resumidas, mais recente primeiro. Não precisa repetir o que já está descrito
 > nas seções acima — só registrar o quê e (se não-óbvio) o porquê.
+
+- **2026-09-01** — Nova estratégia isolada **Box Flex** (`lib/calculators/boxFlex.ts`),
+  modelo-semente com id fixo `"boxFlex"`, totalmente separado do Box Padrão (fórmula,
+  estratégia e id diferentes — nunca compartilham código nem catálogo):
+  - **Fórmula proprietária, cascata fixa**: `custoVidro = m² × R$180` (m² = largura ×
+    altura do item) + `custoFixo = R$2.630` (Kit Padrão R$1.300 + Silicone R$30 + Lucro
+    Operacional R$1.300, constante única) + Dobradiça Avulsa opcional (+R$550, checkbox
+    "Até o teto - Inclui Dobradiça Avulsa") = subtotal de 1 unidade → multiplica pela
+    `quantidade` do item (mesmo campo já usado pelo Espelho, reaproveitado aqui) →
+    **arredonda** esse subtotal geral → só então aplica a Taxa NF/Cartão de 15% sobre
+    esse valor já redondo (`Math.round` explícito antes da taxa, pra ela nunca nascer de
+    uma dízima) → total do item = subtotal geral + taxa.
+  - **Única estratégia do sistema que NÃO lê o catálogo de produtos**: os 4 valores da
+    fórmula (R$180/m², R$2.630, R$550, 15%) são constantes fixas em `boxFlex.ts`, não
+    `ProductKey`/`getValor` — decisão explícita do briefing ("valores base não devem ser
+    editáveis pelo usuário comum"). Nenhuma `ProductKey` nova foi criada; o catálogo de
+    Box Flex em Cadastro de Produtos mostra as mesmas chaves genéricas de todo modelo
+    (herdadas do seed), mas nenhuma delas tem efeito no cálculo — puramente decorativo
+    pra esse modelo específico.
+  - 4 `CalculoItem` sempre transparentes no resumo: "Vidro Box Flex", "Kit Padrão,
+    Silicone e Lucro", "Dobradiça Avulsa" (só quando marcada) e "Taxa NF e Cartão
+    (15%)" — todos `grupo: "estrutural"` (mesmo tratamento do Box Padrão: item fechado,
+    sem ferragens/opcionais universais de divisória, via `ehItemFechado` em
+    `lib/useCalculator.ts`, que ganhou `"boxFlex"` na condição). Quando `quantidade > 1`,
+    o `detalhe` de cada item avisa explicitamente "já multiplicado por N un".
+  - `ProjectInputs` ganhou `larguraBoxFlex`, `alturaBoxFlex`, `dobradicaAvulsa` (boolean,
+    fallback `false`) — `quantidade` já existia (feature anterior) e foi só reaproveitado.
+    `INPUTS_ITEM_INICIAL` (`lib/store.ts`) ganhou os 3 campos novos com default seguro;
+    como o `merge()` de `useOrcamentoDetalhadoDraft` já fazia (e continua fazendo) spread
+    genérico `{ ...INPUTS_ITEM_INICIAL, ...inputsPersistidos }`, isso sozinho já
+    backfilla `dobradicaAvulsa: false` (e as medidas) em rascunhos antigos no
+    localStorage sem lógica nova de merge — mesmo mecanismo já usado pra `quantidade`.
+  - Box Flex entra em `SEED_MODELO_IDS`/`SEED_MODELOS` (`valorM2: 0`, mesma ressalva de
+    Sacada/Box/Espelho) e em `MODELOS_SEM_M2_RETROATIVOS`/`modelosDesmarcados` do
+    Simplificado (desmarcado por padrão, com union retroativo no `merge()` — não existe
+    cálculo por m² fechado de verdade pra ele).
+  - UI (`ProjectCalculator.tsx`): card "Box Flex" condicional (Largura/Altura/Quantidade
+    + checkbox de Dobradiça), aparece no lugar do card de Vãos/Box/Espelho quando o item
+    ativo usa esse modelo; aparece também no menu "Adicionar Item" (lista genérica de
+    `modelos`, nenhuma mudança de UI adicional precisou ser feita ali).
+  - Validado por `tsc`/`eslint`/`build` (limpos) + script isolado (`tsx`) cobrindo: caso
+    simples (1un, sem dobradiça: R$2.810 + taxa R$422 = R$3.232), com dobradiça, com
+    quantidade 3 (cada item multiplicado corretamente, taxa sobre o subtotal geral já
+    multiplicado), m² com decimais feios (1,23×2,07 — confirma que a taxa nunca gera
+    dízima, todo subtotal e o total saem inteiros), quantidade ausente/zero/negativa
+    caindo pro piso de 1, e confirmação de que nenhum item universal de divisória
+    (Puxador, Película...) vaza pro Box Flex — todos batendo.
 
 - **2026-09-01** — Multiplicador de Quantidade no modelo Espelhos:
   - `ProjectInputs` ganhou `quantidade?: number` (opcional, fallback pra 1 em todo lugar

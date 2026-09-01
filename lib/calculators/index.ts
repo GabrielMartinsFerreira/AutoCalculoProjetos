@@ -2,6 +2,7 @@ import { estrategiaSlim } from "./slim";
 import { estrategiaMiterGlass } from "./miterglass";
 import { estrategiaSacada } from "./sacada";
 import { estrategiaBox } from "./box";
+import { estrategiaBoxFlex } from "./boxFlex";
 import { estrategiaEspelho } from "./espelho";
 import type { EstrategiaCalculoModelo } from "./types";
 
@@ -15,6 +16,9 @@ const ESTRATEGIAS: Record<string, EstrategiaCalculoModelo> = {
   miterglass: estrategiaMiterGlass,
   sacada: estrategiaSacada,
   box: estrategiaBox,
+  // Box Flex é INTENCIONALMENTE separado do Box Padrão (id/estratégia/fórmula
+  // diferentes) — fórmula proprietária própria, ver lib/calculators/boxFlex.ts.
+  boxFlex: estrategiaBoxFlex,
   espelho: estrategiaEspelho,
 };
 

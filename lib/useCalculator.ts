@@ -42,9 +42,10 @@ export function calcularOrcamento(
   const estrategia = obterEstrategia(modeloId);
   const itens: CalculoItem[] = [...estrategia.calcularEstrutura(inputs, getValor)];
 
-  // Box tem preço fechado e Espelho tem seus próprios adicionais (grupo dedicado
-  // abaixo) — nenhum dos dois usa ferragens/opcionais "universais" de divisória.
-  const ehItemFechado = modeloId === "box" || modeloId === "espelho";
+  // Box (e Box Flex) têm preço fechado/fórmula própria e Espelho tem seus próprios
+  // adicionais (grupo dedicado abaixo) — nenhum deles usa ferragens/opcionais
+  // "universais" de divisória.
+  const ehItemFechado = modeloId === "box" || modeloId === "boxFlex" || modeloId === "espelho";
 
   if (!ehItemFechado) {
     itens.push(
