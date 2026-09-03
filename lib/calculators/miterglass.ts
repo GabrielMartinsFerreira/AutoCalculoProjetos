@@ -70,5 +70,6 @@ export const estrategiaMiterGlass: EstrategiaCalculoModelo = {
   nome: "Divisória MiterGlass",
   usaTipoVao: false,
   usaCorVidro: false,
+  chavesCatalogo: ["vidro", "perfilU", "tubo2x2"],
   calcularEstrutura,
 };

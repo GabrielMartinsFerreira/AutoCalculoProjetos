@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Pencil, Plus, Trash2, X, Check } from "lucide-react";
 import { EMPTY_PRODUCTS, useModeloStore, useProductStore } from "@/lib/store";
+import { chavesCatalogoDoModelo } from "@/lib/calculators";
 import { TIPOS_VAO, type Product, type TipoVao, type UnidadeVenda } from "@/lib/types";
 import { formatBRL, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -83,6 +84,17 @@ export function ProductCatalog() {
   const [editDraft, setEditDraft] = useState<DraftProduct>(EMPTY_DRAFT);
   const [isAdding, setIsAdding] = useState(false);
   const [addDraft, setAddDraft] = useState<DraftProduct>(EMPTY_DRAFT);
+  const [mostrarTodos, setMostrarTodos] = useState(false);
+
+  // Todo modelo carrega o catálogo inteiro no seed (~60 produtos), mas cada fórmula lê
+  // só um punhado deles. Por padrão mostra só o que entra no cálculo deste modelo (+ os
+  // produtos manuais, key null) — o resto fica atrás de "Mostrar todos".
+  const chavesDoModelo = chavesCatalogoDoModelo(modeloSelecionadoId);
+  const produtosVisiveis = mostrarTodos
+    ? products
+    : products.filter((p) => p.key === null || chavesDoModelo.includes(p.key));
+  const qtdOcultos = products.length - produtosVisiveis.length;
+  const semCatalogo = modeloSelecionadoId === "boxFlex";
 
   function startEdit(p: Product) {
     setIsAdding(false);
@@ -122,24 +134,39 @@ export function ProductCatalog() {
 
   return (
     <Card className="reveal">
-      <CardHeader className="flex-row items-center justify-between">
+      <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
         <div>
           <CardTitle>Catálogo de Produtos · {nomeModelo}</CardTitle>
           <CardDescription>
-            Materiais e ferragens deste modelo — cada modelo tem seu próprio catálogo, independente dos demais
+            {mostrarTodos
+              ? `Todos os ${products.length} produtos deste catálogo — cada modelo tem o seu, independente dos demais`
+              : `${produtosVisiveis.length} produto(s) usados no cálculo deste modelo${qtdOcultos > 0 ? ` · ${qtdOcultos} sem uso ocultos` : ""}`}
           </CardDescription>
         </div>
-        <Button
-          size="sm"
-          onClick={() => {
-            setEditingId(null);
-            setIsAdding((v) => !v);
-          }}
-        >
-          <Plus className="h-4 w-4" />
-          Novo Produto
-        </Button>
+        <div className="flex items-center gap-2">
+          {qtdOcultos > 0 || mostrarTodos ? (
+            <Button size="sm" variant="outline" onClick={() => setMostrarTodos((v) => !v)}>
+              {mostrarTodos ? "Só os usados pelo modelo" : `Mostrar todos (${qtdOcultos})`}
+            </Button>
+          ) : null}
+          <Button
+            size="sm"
+            onClick={() => {
+              setEditingId(null);
+              setIsAdding((v) => !v);
+            }}
+          >
+            <Plus className="h-4 w-4" />
+            Novo Produto
+          </Button>
+        </div>
       </CardHeader>
+      {semCatalogo && (
+        <p className="border-b border-amber-200 bg-amber-50 px-5 py-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          Box Flex usa valores fixos na própria fórmula (vidro R$180/m², custo fixo R$2.630, dobradiça R$550, taxa
+          15%) — nada deste catálogo entra no cálculo dele.
+        </p>
+      )}
       <CardContent className="overflow-x-auto p-0">
         <table className="w-full min-w-[720px] text-sm">
           <thead>
@@ -212,7 +239,7 @@ export function ProductCatalog() {
               </tr>
             )}
 
-            {products.map((p) => {
+            {produtosVisiveis.map((p) => {
               const editing = editingId === p.id;
               return (
                 <tr
@@ -317,9 +344,11 @@ export function ProductCatalog() {
             })}
           </tbody>
         </table>
-        {products.length === 0 && !isAdding && (
+        {produtosVisiveis.length === 0 && !isAdding && (
           <p className="px-5 py-8 text-center text-sm text-zinc-400 dark:text-zinc-500">
-            Nenhum produto cadastrado para {nomeModelo} ainda. Clique em &quot;Novo Produto&quot; para começar.
+            {products.length === 0
+              ? `Nenhum produto cadastrado para ${nomeModelo} ainda. Clique em "Novo Produto" para começar.`
+              : `Nenhum produto deste catálogo entra no cálculo de ${nomeModelo}. Use "Mostrar todos" para ver os ${products.length} cadastrados.`}
           </p>
         )}
       </CardContent>

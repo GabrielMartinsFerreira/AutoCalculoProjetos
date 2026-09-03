@@ -101,5 +101,6 @@ export const estrategiaBox: EstrategiaCalculoModelo = {
   nome: "Box Padrão",
   usaTipoVao: false,
   usaCorVidro: false,
+  chavesCatalogo: OPCOES_MEDIDA_BOX.flatMap((o) => [o.keyVista, o.keyCartao]),
   calcularEstrutura,
 };

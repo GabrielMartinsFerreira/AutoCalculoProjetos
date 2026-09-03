@@ -40,7 +40,18 @@ function cortesTubo2x2DoVao(vao: Vao): number[] {
  */
 function barrasNecessarias(cortes: number[]): number {
   const sobras: number[] = [];
+  let barrasInteirasExtras = 0;
   for (const corte of cortes) {
+    // Corte sem medida (vão ainda não preenchido, altura/largura 0) não consome barra —
+    // antes um corte de 0m abria uma barra inteira à toa.
+    if (!(corte > 0)) continue;
+    // Peça maior que a barra: fisicamente exige emenda ou barra especial. Conta as
+    // barras inteiras necessárias (ceil) sem gerar sobra aproveitável — melhor cobrar a
+    // mais do que fingir que uma peça de 6,5m sai inteira de uma barra de 6m.
+    if (corte > CAPACIDADE_BARRA_TUBO_M) {
+      barrasInteirasExtras += Math.ceil(corte / CAPACIDADE_BARRA_TUBO_M);
+      continue;
+    }
     const indiceComEspaco = sobras.findIndex((sobra) => sobra >= corte);
     if (indiceComEspaco >= 0) {
       sobras[indiceComEspaco] -= corte;
@@ -48,7 +59,7 @@ function barrasNecessarias(cortes: number[]): number {
       sobras.push(CAPACIDADE_BARRA_TUBO_M - corte);
     }
   }
-  return sobras.length;
+  return sobras.length + barrasInteirasExtras;
 }
 
 /**
@@ -130,5 +141,6 @@ export const estrategiaSlim: EstrategiaCalculoModelo = {
   nome: "Divisória Slim",
   usaTipoVao: true,
   usaCorVidro: false,
+  chavesCatalogo: ["vidro", "perfilU", "tubo2x2", "perfilEngenharia"],
   calcularEstrutura,
 };

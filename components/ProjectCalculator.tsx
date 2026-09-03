@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { RotateCcw, Plus, Layers, Save, Trash2 } from "lucide-react";
+import { RotateCcw, Plus, Layers, Save, Trash2, Copy } from "lucide-react";
 import { useResumoCarrinho } from "@/lib/useCalculator";
-import { obterEstrategia } from "@/lib/calculators";
+import { ehItemFechado, obterEstrategia } from "@/lib/calculators";
 import { OPCOES_MEDIDA_BOX } from "@/lib/calculators/box";
-import { MODELOS_BASE_ESPELHO, MODELOS_ESPECIAIS_ESPELHO } from "@/lib/calculators/espelho";
+import { MODELOS_BASE_ESPELHO, MODELOS_ESPECIAIS_ESPELHO, totalEspelhosDoItem } from "@/lib/calculators/espelho";
 import { EMPTY_PRODUCTS, useModeloStore, useOrcamentoDetalhadoDraft, useProductStore } from "@/lib/store";
 import { cn, formatBRL } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,8 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select } from "@/components/ui/select";
 import { VaoRow } from "@/components/VaoRow";
+import { EspelhoPecaRow } from "@/components/EspelhoPecaRow";
+import { AdicionarItemDialog } from "@/components/AdicionarItemDialog";
 import { SalvarOrcamentoDialog, type DadosSalvarOrcamento } from "@/components/SalvarOrcamentoDialog";
 import type { CalculoItem, MedidaFrontalBox, OrcamentoDetalhadoDados, ProductKey, ProjectInputs } from "@/lib/types";
 
@@ -82,6 +84,7 @@ export function ProjectCalculator() {
   const valorRT = useOrcamentoDetalhadoDraft((s) => s.valorRT);
   const addItem = useOrcamentoDetalhadoDraft((s) => s.addItem);
   const removeItem = useOrcamentoDetalhadoDraft((s) => s.removeItem);
+  const duplicarItem = useOrcamentoDetalhadoDraft((s) => s.duplicarItem);
   const renomearItem = useOrcamentoDetalhadoDraft((s) => s.renomearItem);
   const trocarModeloItem = useOrcamentoDetalhadoDraft((s) => s.trocarModeloItem);
   const selecionarItem = useOrcamentoDetalhadoDraft((s) => s.selecionarItem);
@@ -89,6 +92,9 @@ export function ProjectCalculator() {
   const addVaoItem = useOrcamentoDetalhadoDraft((s) => s.addVaoItem);
   const updateVaoItem = useOrcamentoDetalhadoDraft((s) => s.updateVaoItem);
   const removeVaoItem = useOrcamentoDetalhadoDraft((s) => s.removeVaoItem);
+  const addPecaEspelhoItem = useOrcamentoDetalhadoDraft((s) => s.addPecaEspelhoItem);
+  const updatePecaEspelhoItem = useOrcamentoDetalhadoDraft((s) => s.updatePecaEspelhoItem);
+  const removePecaEspelhoItem = useOrcamentoDetalhadoDraft((s) => s.removePecaEspelhoItem);
   const setRT = useOrcamentoDetalhadoDraft((s) => s.setRT);
   const resetDraft = useOrcamentoDetalhadoDraft((s) => s.reset);
 
@@ -102,7 +108,8 @@ export function ProjectCalculator() {
   const resultadoAtivo = resumo.itens.find((i) => i.itemId === itemAtivo.id)?.resultado ?? resumo.itens[0].resultado;
   const estrategiaAtiva = obterEstrategia(itemAtivo.modeloId);
   const produtosDoItemAtivo = productsByModelo[itemAtivo.modeloId] ?? EMPTY_PRODUCTS;
-  const nomeModeloAtivo = modelos.find((m) => m.id === itemAtivo.modeloId)?.nome ?? "modelo";
+  const nomeDoModelo = (id: string) => modelos.find((m) => m.id === id)?.nome ?? id;
+  const nomeModeloAtivo = nomeDoModelo(itemAtivo.modeloId);
   const pelicula = produtosDoItemAtivo.find((p) => p.key === "pelicula");
   const laDeVidro = produtosDoItemAtivo.find((p) => p.key === "laDeVidro");
   // Mesmo quando a fórmula do modelo não usa o tipo do vão, o campo precisa continuar
@@ -114,7 +121,9 @@ export function ProjectCalculator() {
   const isBox = itemAtivo.modeloId === "box";
   const isBoxFlex = itemAtivo.modeloId === "boxFlex";
   const isEspelho = itemAtivo.modeloId === "espelho";
-  const isDivisoria = !isBox && !isBoxFlex && !isEspelho;
+  // Regra única de "item fechado" vive em lib/calculators/index.ts — mesma usada pelo cálculo.
+  const isDivisoria = !ehItemFechado(itemAtivo.modeloId);
+  const totalEspelhosAtivo = isEspelho ? totalEspelhosDoItem(itemAtivo.inputs) : 0;
 
   const [mostrarSalvar, setMostrarSalvar] = useState(false);
   const [mostrarAdicionar, setMostrarAdicionar] = useState(false);
@@ -130,6 +139,11 @@ export function ProjectCalculator() {
   function novoOrcamento() {
     if (!confirm("Começar um novo orçamento? Todos os itens atuais serão apagados.")) return;
     resetDraft();
+  }
+
+  function removerItem(id: string, ambiente: string) {
+    if (!confirm(`Remover o item "${ambiente || "Sem nome"}" do orçamento?`)) return;
+    removeItem(id);
   }
 
   async function salvarOrcamento(dadosExtra: DadosSalvarOrcamento) {
@@ -157,36 +171,19 @@ export function ProjectCalculator() {
         <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
           <div>
             <CardTitle>Itens do Orçamento</CardTitle>
-            <CardDescription>Cada item é um ambiente/produto independente — Divisória, Box ou Espelho</CardDescription>
+            <CardDescription>
+              Cada item é um ambiente/produto independente — Divisória, Sacada, Box, Box Flex ou Espelhos
+            </CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" onClick={novoOrcamento} title="Limpar tudo e começar um orçamento novo">
               <RotateCcw className="h-4 w-4" />
               Novo Orçamento
             </Button>
-            <div className="relative">
-              <Button size="sm" onClick={() => setMostrarAdicionar((v) => !v)}>
-                <Plus className="h-4 w-4" />
-                Adicionar Item
-              </Button>
-              {mostrarAdicionar && (
-                <div className="absolute right-0 top-full z-20 mt-1 flex w-56 flex-col gap-0.5 rounded-lg border border-zinc-200 bg-white p-1.5 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
-                  {modelos.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => {
-                        addItem(m.id);
-                        setMostrarAdicionar(false);
-                      }}
-                      className="rounded-md px-2 py-1.5 text-left text-sm text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                    >
-                      {m.nome}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <Button size="sm" onClick={() => setMostrarAdicionar(true)}>
+              <Plus className="h-4 w-4" />
+              Adicionar Item
+            </Button>
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -198,7 +195,7 @@ export function ProjectCalculator() {
                 <div
                   key={item.id}
                   className={cn(
-                    "flex items-center gap-1 rounded-lg border py-1.5 pl-3 pr-1 text-sm",
+                    "flex items-center gap-0.5 rounded-lg border py-1.5 pl-3 pr-1 text-sm",
                     ativo
                       ? "border-cyan-400 bg-cyan-50 dark:border-cyan-700 dark:bg-cyan-950/40"
                       : "border-zinc-200 dark:border-zinc-800"
@@ -207,16 +204,24 @@ export function ProjectCalculator() {
                   <button type="button" onClick={() => selecionarItem(item.id)} className="flex flex-col items-start text-left">
                     <span className="font-medium text-zinc-800 dark:text-zinc-100">{item.ambiente || "Sem nome"}</span>
                     <span className="font-mono text-[0.65rem] text-zinc-400 dark:text-zinc-500">
-                      {modelos.find((m) => m.id === item.modeloId)?.nome ?? item.modeloId} ·{" "}
-                      {formatBRL(r?.resultado.total ?? 0)}
+                      {nomeDoModelo(item.modeloId)} · {formatBRL(r?.resultado.total ?? 0)}
                     </span>
                   </button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="ml-1 h-6 w-6 text-zinc-400 hover:text-cyan-700 dark:hover:text-cyan-300"
+                    onClick={() => duplicarItem(item.id)}
+                    title="Duplicar item (mesmas medidas e opções)"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
                   {itens.length > 1 && (
                     <Button
                       size="icon"
                       variant="ghost"
                       className="h-6 w-6 text-zinc-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 dark:hover:text-red-300"
-                      onClick={() => removeItem(item.id)}
+                      onClick={() => removerItem(item.id, item.ambiente)}
                       title="Remover item"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -409,88 +414,75 @@ export function ProjectCalculator() {
 
           {isEspelho && (
             <Card className="reveal" style={{ animationDelay: "40ms" }}>
-              <CardHeader>
-                <CardTitle>Espelho</CardTitle>
-                <CardDescription>
-                  Área mínima cobrada: 0,30 m² · Modelo Especial (se escolhido) anula o Modelo Base
-                </CardDescription>
+              <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
+                <div>
+                  <CardTitle>Espelhos</CardTitle>
+                  <CardDescription>
+                    {itemAtivo.inputs.pecasEspelho.length} medida(s) · {totalEspelhosAtivo} espelho(s) no item · mínimo cobrado
+                    0,30 m² por peça
+                  </CardDescription>
+                </div>
+                <Button size="sm" onClick={() => addPecaEspelhoItem(itemAtivo.id)}>
+                  <Plus className="h-4 w-4" />
+                  Adicionar Espelho
+                </Button>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                  <div className="flex flex-col gap-1">
-                    <Label>Largura (m)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min={0}
-                      value={itemAtivo.inputs.larguraEspelho}
-                      onChange={(e) => atualizarInputsAtivo({ larguraEspelho: Number(e.target.value) })}
-                      className="font-mono"
+                <div className="flex flex-col gap-3">
+                  {itemAtivo.inputs.pecasEspelho.map((peca, i) => (
+                    <EspelhoPecaRow
+                      key={peca.id}
+                      peca={peca}
+                      index={i}
+                      podeRemover={itemAtivo.inputs.pecasEspelho.length > 1}
+                      onChange={(p) => updatePecaEspelhoItem(itemAtivo.id, peca.id, p)}
+                      onRemove={() => removePecaEspelhoItem(itemAtivo.id, peca.id)}
                     />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <Label>Altura (m)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min={0}
-                      value={itemAtivo.inputs.alturaEspelho}
-                      onChange={(e) => atualizarInputsAtivo({ alturaEspelho: Number(e.target.value) })}
-                      className="font-mono"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <Label>Quantidade (un)</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={itemAtivo.inputs.quantidade ?? 1}
-                      onChange={(e) => atualizarInputsAtivo({ quantidade: Number(e.target.value) })}
-                      className="font-mono"
-                      title="Espelhos idênticos (mesma medida/acabamento) cotados neste item"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1">
-                    <Label>Modelo Base</Label>
-                    <Select
-                      value={itemAtivo.inputs.espelhoModeloBase ?? ""}
-                      onChange={(e) =>
-                        atualizarInputsAtivo({
-                          espelhoModeloBase: (e.target.value || null) as ProductKey | null,
-                        })
-                      }
-                    >
-                      <option value="">Selecione...</option>
-                      {MODELOS_BASE_ESPELHO.map((o) => (
-                        <option key={o.key} value={o.key}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <Label>Modelo Especial (opcional — anula o Modelo Base)</Label>
-                    <Select
-                      value={itemAtivo.inputs.espelhoModeloEspecial ?? ""}
-                      onChange={(e) =>
-                        atualizarInputsAtivo({
-                          espelhoModeloEspecial: (e.target.value || null) as ProductKey | null,
-                        })
-                      }
-                    >
-                      <option value="">Nenhum (usar Modelo Base)</option>
-                      {MODELOS_ESPECIAIS_ESPELHO.map((o) => (
-                        <option key={o.key} value={o.key}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
+                  ))}
                 </div>
 
-                <GrupoFerragens titulo="Adicionais do Espelho">
+                <GrupoFerragens titulo="Modelo e acabamento (vale pra todas as peças do item)">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="flex flex-col gap-1">
+                      <Label>Modelo Base</Label>
+                      <Select
+                        value={itemAtivo.inputs.espelhoModeloBase ?? ""}
+                        onChange={(e) =>
+                          atualizarInputsAtivo({
+                            espelhoModeloBase: (e.target.value || null) as ProductKey | null,
+                          })
+                        }
+                      >
+                        <option value="">Selecione...</option>
+                        {MODELOS_BASE_ESPELHO.map((o) => (
+                          <option key={o.key} value={o.key}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Label>Modelo Especial (opcional — anula o Modelo Base)</Label>
+                      <Select
+                        value={itemAtivo.inputs.espelhoModeloEspecial ?? ""}
+                        onChange={(e) =>
+                          atualizarInputsAtivo({
+                            espelhoModeloEspecial: (e.target.value || null) as ProductKey | null,
+                          })
+                        }
+                      >
+                        <option value="">Nenhum (usar Modelo Base)</option>
+                        {MODELOS_ESPECIAIS_ESPELHO.map((o) => (
+                          <option key={o.key} value={o.key}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                  </div>
+                </GrupoFerragens>
+
+                <GrupoFerragens titulo={`Adicionais (por espelho — multiplicados pelos ${totalEspelhosAtivo} espelho(s) do item)`}>
                   <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                     <label className="flex items-center gap-2 pt-5">
                       <Checkbox
@@ -722,6 +714,15 @@ export function ProjectCalculator() {
                         />
                         <span className="text-sm text-zinc-700 dark:text-zinc-300">Incluir ART Engenheiro</span>
                       </label>
+                      <label className="flex items-center gap-2 sm:col-span-3">
+                        <Checkbox
+                          checked={itemAtivo.inputs.kitCorDiferenteSacada}
+                          onChange={(e) => atualizarInputsAtivo({ kitCorDiferenteSacada: e.target.checked })}
+                        />
+                        <span className="text-sm text-zinc-700 dark:text-zinc-300">
+                          Kit em cor diferente (+15% sobre o kit — o vidro não entra)
+                        </span>
+                      </label>
                     </div>
                   </GrupoFerragens>
                 )}
@@ -738,7 +739,9 @@ export function ProjectCalculator() {
                   <Layers className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
                   Resumo do Item Ativo
                 </CardTitle>
-                <CardDescription>{itemAtivo.ambiente || "Sem nome"}</CardDescription>
+                <CardDescription>
+                  {itemAtivo.ambiente || "Sem nome"} · {nomeModeloAtivo}
+                </CardDescription>
               </div>
               <div className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-zinc-200 bg-zinc-100/80 p-1 text-[0.7rem] dark:border-zinc-800 dark:bg-zinc-900/60">
                 <button
@@ -777,23 +780,27 @@ export function ProjectCalculator() {
                       <LinhaItem key={`${item.label}-${i}`} item={item} />
                     ))}
                     <div className="flex items-center justify-between border-t border-zinc-100 pt-2 text-sm dark:border-zinc-800">
-                      <span className="font-semibold text-zinc-800 dark:text-zinc-100">Subtotal da Divisória</span>
+                      <span className="font-semibold text-zinc-800 dark:text-zinc-100">
+                        {isDivisoria ? "Subtotal da Divisória" : "Subtotal do Produto"}
+                      </span>
                       <span className="font-mono font-semibold text-zinc-800 dark:text-zinc-100">
                         {formatBRL(resultadoAtivo.subtotalEstrutural)}
                       </span>
                     </div>
                   </div>
-                  <div className="flex flex-col gap-3 border-t border-zinc-100 pt-3 dark:border-zinc-800">
-                    {itensOpcionais.map((item, i) => (
-                      <LinhaItem key={`${item.label}-${i}`} item={item} />
-                    ))}
-                    <div className="flex items-center justify-between border-t border-zinc-100 pt-2 text-sm dark:border-zinc-800">
-                      <span className="font-semibold text-zinc-800 dark:text-zinc-100">Subtotal de Opcionais</span>
-                      <span className="font-mono font-semibold text-zinc-800 dark:text-zinc-100">
-                        {formatBRL(resultadoAtivo.subtotalOpcionais)}
-                      </span>
+                  {itensOpcionais.length > 0 && (
+                    <div className="flex flex-col gap-3 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+                      {itensOpcionais.map((item, i) => (
+                        <LinhaItem key={`${item.label}-${i}`} item={item} />
+                      ))}
+                      <div className="flex items-center justify-between border-t border-zinc-100 pt-2 text-sm dark:border-zinc-800">
+                        <span className="font-semibold text-zinc-800 dark:text-zinc-100">Subtotal de Opcionais</span>
+                        <span className="font-mono font-semibold text-zinc-800 dark:text-zinc-100">
+                          {formatBRL(resultadoAtivo.subtotalOpcionais)}
+                        </span>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </>
               )}
             </CardContent>
@@ -813,11 +820,33 @@ export function ProjectCalculator() {
               <CardDescription>{itens.length} item(ns) no orçamento</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-zinc-500 dark:text-zinc-400">Soma de todos os itens</span>
-                <span className="font-mono font-medium text-zinc-700 dark:text-zinc-300">
-                  {formatBRL(resumo.totalGeralAntesDoRT)}
-                </span>
+              <div className="flex flex-col gap-1">
+                {resumo.itens.map((r) => (
+                  <button
+                    key={r.itemId}
+                    type="button"
+                    onClick={() => selecionarItem(r.itemId)}
+                    className={cn(
+                      "flex items-center justify-between gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800",
+                      r.itemId === itemAtivo.id && "bg-zinc-100 dark:bg-zinc-800"
+                    )}
+                    title="Editar este item"
+                  >
+                    <span className="min-w-0 truncate text-zinc-700 dark:text-zinc-300">
+                      {r.ambiente || "Sem nome"}{" "}
+                      <span className="text-zinc-400 dark:text-zinc-500">· {nomeDoModelo(r.modeloId)}</span>
+                    </span>
+                    <span className="shrink-0 font-mono text-zinc-700 dark:text-zinc-300">
+                      {formatBRL(r.resultado.total)}
+                    </span>
+                  </button>
+                ))}
+                <div className="flex items-center justify-between border-t border-zinc-100 px-2 pt-2 text-sm dark:border-zinc-800">
+                  <span className="text-zinc-500 dark:text-zinc-400">Soma de todos os itens</span>
+                  <span className="font-mono font-medium text-zinc-700 dark:text-zinc-300">
+                    {formatBRL(resumo.totalGeralAntesDoRT)}
+                  </span>
+                </div>
               </div>
 
               <GrupoFerragens titulo="Reserva Técnica (Projeto)">
@@ -871,6 +900,17 @@ export function ProjectCalculator() {
           </Card>
         </div>
       </div>
+
+      {mostrarAdicionar && (
+        <AdicionarItemDialog
+          modelos={modelos}
+          onEscolher={(modeloId) => {
+            addItem(modeloId);
+            setMostrarAdicionar(false);
+          }}
+          onClose={() => setMostrarAdicionar(false)}
+        />
+      )}
 
       {mostrarSalvar && (
         <SalvarOrcamentoDialog onClose={() => setMostrarSalvar(false)} onConfirmar={salvarOrcamento} />

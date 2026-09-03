@@ -4,11 +4,12 @@ import type { CalculoItem, ProductKey, ProjectInputs } from "../types";
 export type GetValor = (key: ProductKey) => number;
 
 /**
- * Estratégia de cálculo estrutural de um modelo de divisória (vidro, perfis, tubos).
- * Ferragens/opcionais universais (puxador, fechadura, película, porta premium, lã de
- * vidro, adicional noturno, RT, ART, caixa de ar-condicionado, respiro, produtos
- * vinculados a tipo de vão) NÃO entram aqui — são somados depois, igualmente para
- * qualquer modelo, em lib/useCalculator.ts.
+ * Estratégia de cálculo estrutural de um modelo (vidro, perfis, tubos — ou preço
+ * fechado/composto, no caso de Box/Box Flex/Espelho). Ferragens/opcionais universais
+ * (puxador, fechadura, película, porta premium, lã de vidro, adicional noturno, kits de
+ * porta, produtos vinculados a tipo de vão) e os opcionais exclusivos de Sacada/Espelho
+ * NÃO entram aqui — são somados depois em lib/useCalculator.ts. A RT é do projeto
+ * inteiro (calcularResumoCarrinho), nunca da estratégia.
  */
 export interface EstrategiaCalculoModelo {
   /** Deve bater com o Modelo.id ao qual esta estratégia se aplica. */
@@ -19,6 +20,13 @@ export interface EstrategiaCalculoModelo {
   usaTipoVao: boolean;
   /** Se verdadeiro, mostra o seletor de cor do vidro (hoje só a Sacada usa). */
   usaCorVidro: boolean;
+  /**
+   * Chaves do catálogo que ESTA fórmula estrutural lê via `getValor`. Usado só pra
+   * filtrar o Cadastro de Produtos (mostrar o que importa pro modelo) — não afeta o
+   * cálculo. As chaves dos opcionais somados em lib/useCalculator.ts ficam em
+   * `chavesCatalogoDoModelo` (lib/calculators/index.ts), não aqui.
+   */
+  chavesCatalogo: ProductKey[];
   /**
    * Calcula os itens estruturais (vidro, perfis, tubos...) a partir de todo o
    * ProjectInputs — recebe o objeto inteiro (não só `vaos`) porque algumas estratégias

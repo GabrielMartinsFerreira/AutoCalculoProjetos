@@ -14,11 +14,18 @@ const FAIXAS_KIT: { ateMetros: number; key: "kitSacada2m" | "kitSacada3m" | "kit
 ];
 const FAIXA_MAXIMA = FAIXAS_KIT[FAIXAS_KIT.length - 1]; // 6m
 
+/** Acréscimo sobre o subtotal dos KITS (só o kit — o vidro não entra) quando o kit é em cor diferente da padrão. */
+export const PERCENTUAL_KIT_COR_DIFERENTE = 0.15;
+
 /**
  * Devolve a lista de faixas de kit usadas para cobrir uma largura (pode ser mais de uma,
- * se > 6m) — cada entrada é uma faixa efetivamente cobrada.
+ * se > 6m) — cada entrada é uma faixa efetivamente cobrada. Vão sem largura (ainda não
+ * preenchido, ou zero) não tem kit nenhum — antes caía na faixa de 2m e cobrava um kit
+ * inteiro por um vão vazio.
  */
-function combinarKits(larguraMetros: number): (typeof FAIXAS_KIT)[number][] {
+export function combinarKits(larguraMetros: number): (typeof FAIXAS_KIT)[number][] {
+  if (!(larguraMetros > 0)) return [];
+
   const combinacao: (typeof FAIXAS_KIT)[number][] = [];
   let restante = larguraMetros;
 
@@ -34,6 +41,7 @@ function combinarKits(larguraMetros: number): (typeof FAIXAS_KIT)[number][] {
 function calcularEstrutura(inputs: ProjectInputs, getValor: GetValor): CalculoItem[] {
   const vaos: Vao[] = inputs.vaos;
   const areaVidro = vaos.reduce((acc, v) => acc + v.largura * v.altura, 0);
+  const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
   const keyVidro = inputs.corVidroSacada === "verde" ? "vidroSacadaVerde" : "vidroSacadaIncolor";
   const nomeCor = inputs.corVidroSacada === "verde" ? "VERDE" : "INCOLOR";
@@ -46,27 +54,37 @@ function calcularEstrutura(inputs: ProjectInputs, getValor: GetValor): CalculoIt
     const faixas = combinarKits(vao.largura);
     const custoVao = faixas.reduce((acc, f) => acc + getValor(f.key), 0);
     custoKits += custoVao;
-    const descricaoFaixas = faixas.map((f) => `${f.ateMetros}m`).join(" + ");
+    const descricaoFaixas = faixas.length > 0 ? faixas.map((f) => `${f.ateMetros}m`).join(" + ") : "sem kit";
     resumoKitsPorVao.push(`${vao.largura.toFixed(2)}m → ${descricaoFaixas}`);
   }
 
-  return [
+  const itens: CalculoItem[] = [
     {
       label: `Vidro Laminado 10mm ${nomeCor}`,
-      detalhe: `${areaVidro.toFixed(2)} m² × ${valorVidro.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`,
+      detalhe: `${areaVidro.toFixed(2)} m² × ${fmt(valorVidro)}`,
       subtotal: areaVidro * valorVidro,
       grupo: "estrutural",
     },
     {
       label: "Kit(s) da Sacada",
-      detalhe:
-        vaos.length > 0
-          ? `por vão: ${resumoKitsPorVao.join("; ")}`
-          : "Nenhum vão cadastrado",
+      detalhe: vaos.length > 0 ? `por vão: ${resumoKitsPorVao.join("; ")}` : "Nenhum vão cadastrado",
       subtotal: custoKits,
       grupo: "estrutural",
     },
   ];
+
+  // Kit em cor diferente da padrão: +15% SOMENTE sobre o subtotal dos kits — o vidro
+  // não entra na base. Opcional, ligado por checkbox em "Opcionais da Sacada".
+  if (inputs.kitCorDiferenteSacada) {
+    itens.push({
+      label: "Kit em Cor Diferente (+15%)",
+      detalhe: `${PERCENTUAL_KIT_COR_DIFERENTE * 100}% sobre ${fmt(custoKits)} (só o kit, o vidro não entra)`,
+      subtotal: custoKits * PERCENTUAL_KIT_COR_DIFERENTE,
+      grupo: "estrutural",
+    });
+  }
+
+  return itens;
 }
 
 export const estrategiaSacada: EstrategiaCalculoModelo = {
@@ -74,5 +92,6 @@ export const estrategiaSacada: EstrategiaCalculoModelo = {
   nome: "Sacada",
   usaTipoVao: false,
   usaCorVidro: true,
+  chavesCatalogo: ["vidroSacadaIncolor", "vidroSacadaVerde", "kitSacada2m", "kitSacada3m", "kitSacada4m", "kitSacada6m"],
   calcularEstrutura,
 };

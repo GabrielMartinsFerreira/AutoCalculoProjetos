@@ -11,9 +11,14 @@ import { useModeloStore, useOrcamentoDetalhadoDraft, useProductStore } from "@/l
 
 export function HomeContent({ userEmail }: { userEmail: string }) {
   const [tab, setTab] = useState("calculadora");
-  const nomeModelo = useModeloStore(
+  // O seletor de modelo do cabeçalho só decide QUAL catálogo está sendo editado em
+  // "Cadastro de Produtos" — desde a reforma "Carrinho", cada item do orçamento escolhe
+  // o próprio modelo. Por isso ele (e o subtítulo com o nome do modelo) só aparece na
+  // aba de produtos; na calculadora confundia, parecendo mudar o modelo do orçamento.
+  const nomeModeloCatalogo = useModeloStore(
     (s) => s.modelos.find((m) => m.id === s.modeloSelecionadoId)?.nome ?? "modelo"
   );
+  const qtdItens = useOrcamentoDetalhadoDraft((s) => s.itens.length);
 
   useEffect(() => {
     useProductStore.persist.rehydrate();
@@ -21,11 +26,17 @@ export function HomeContent({ userEmail }: { userEmail: string }) {
     useOrcamentoDetalhadoDraft.persist.rehydrate();
   }, []);
 
+  const emProdutos = tab === "produtos";
+
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 lg:py-8">
       <AppHeader
-        subtitle={`Orçamento detalhado · ${nomeModelo}`}
-        extraControls={<ModeloSelector />}
+        subtitle={
+          emProdutos
+            ? `Cadastro de produtos · ${nomeModeloCatalogo}`
+            : `Orçamento detalhado · ${qtdItens} item(ns) no carrinho`
+        }
+        extraControls={emProdutos ? <ModeloSelector /> : undefined}
         userEmail={userEmail}
         pageTabs={
           <Tabs value={tab} onValueChange={setTab}>

@@ -4,12 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FolderOpen, Layers3, Search, Trash2, Zap } from "lucide-react";
 import { useOrcamentoDetalhadoDraft, useOrcamentoSimplificadoDraft } from "@/lib/store";
-import type {
-  OrcamentoDetalhadoDados,
-  OrcamentoSalvoDetalhe,
-  OrcamentoSalvoResumo,
-  SimplifiedInputs,
-} from "@/lib/types";
+import type { OrcamentoSalvoDetalhe, OrcamentoSalvoResumo } from "@/lib/types";
 import { formatBRL } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -37,8 +32,11 @@ export function OrcamentosSalvos({
   const [carregandoId, setCarregandoId] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
   const router = useRouter();
+  // setDraft normaliza o payload de qualquer época (formatos antigos inclusos) — nunca
+  // jogar `dados` cru no rascunho, senão orçamentos salvos antes de uma mudança de
+  // formato quebram a tela ao abrir.
   const setDraftDetalhado = useOrcamentoDetalhadoDraft((s) => s.setDraft);
-  const setInputsSimplificado = useOrcamentoSimplificadoDraft((s) => s.setInputs);
+  const setDraftSimplificado = useOrcamentoSimplificadoDraft((s) => s.setDraft);
 
   const itensFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -57,10 +55,10 @@ export function OrcamentosSalvos({
       if (!res.ok) throw new Error();
       const completo: OrcamentoSalvoDetalhe = await res.json();
       if (completo.tipo === "detalhado") {
-        setDraftDetalhado(completo.dados as OrcamentoDetalhadoDados);
+        setDraftDetalhado(completo.dados);
         router.push("/");
       } else {
-        setInputsSimplificado(completo.dados as SimplifiedInputs);
+        setDraftSimplificado(completo.dados);
         router.push("/simplificado");
       }
     } catch {

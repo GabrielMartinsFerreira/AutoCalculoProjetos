@@ -6,6 +6,7 @@ import type {
   Modelo,
   OpcionaisSimplificado,
   OrcamentoDetalhadoDados,
+  PecaEspelho,
   Product,
   ProductKey,
   ProjectInputs,
@@ -489,7 +490,11 @@ export function criarVaoSimples(): VaoSimples {
   return { id: crypto.randomUUID(), largura: 1, altura: 2.1 };
 }
 
-/** Inputs padrão de UM item novo do carrinho — vale pra Divisória, Box ou Espelho (ver ProjectInputs). */
+export function criarPecaEspelhoPadrao(): PecaEspelho {
+  return { id: crypto.randomUUID(), largura: 1, altura: 1, quantidade: 1 };
+}
+
+/** Inputs padrão de UM item novo do carrinho — vale pra Divisória, Box, Box Flex ou Espelho (ver ProjectInputs). */
 const INPUTS_ITEM_INICIAL: ProjectInputs = {
   vaos: [{ id: "vao-1", largura: 1, altura: 2.1, tipo: "Fixo" }],
   qtdPuxadores: 0,
@@ -504,10 +509,10 @@ const INPUTS_ITEM_INICIAL: ProjectInputs = {
   incluirArtEngenheiro: false,
   qtdCaixaArCondicionado: 0,
   m2RespiroAluminio: 0,
+  kitCorDiferenteSacada: false,
   medidaFrontalBox: null,
   tipoPagamentoBox: "vista",
-  larguraEspelho: 1,
-  alturaEspelho: 1,
+  pecasEspelho: [{ id: "peca-1", largura: 1, altura: 1, quantidade: 1 }],
   espelhoModeloBase: null,
   espelhoModeloEspecial: null,
   incluirDesembacadorEspelho: false,
@@ -521,8 +526,52 @@ const INPUTS_ITEM_INICIAL: ProjectInputs = {
   dobradicaAvulsa: false,
 };
 
+function numeroOu(valor: unknown, padrao: number): number {
+  return typeof valor === "number" && Number.isFinite(valor) ? valor : padrao;
+}
+
+/**
+ * Normaliza os inputs de UM item vindos de qualquer fonte e de qualquer época
+ * (rascunho antigo no localStorage, ou `dados` de um orçamento salvo no Supabase — que
+ * NÃO passa pelo merge() do Zustand ao ser reaberto): backfill de todo campo novo com o
+ * padrão + migração do Espelho de medida única (larguraEspelho/alturaEspelho/quantidade)
+ * pra `pecasEspelho[]`. Ao adicionar um campo novo a ProjectInputs, basta colocar o
+ * default em INPUTS_ITEM_INICIAL — o spread aqui já cobre o backfill.
+ */
+export function normalizarInputsItem(raw: unknown): ProjectInputs {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Partial<ProjectInputs> & Record<string, unknown>;
+  const inputs: ProjectInputs = { ...INPUTS_ITEM_INICIAL, ...r };
+
+  if (!Array.isArray(inputs.vaos)) inputs.vaos = [{ id: "vao-1", largura: 1, altura: 2.1, tipo: "Fixo" }];
+
+  const pecasPersistidas = Array.isArray(r.pecasEspelho) ? (r.pecasEspelho as Partial<PecaEspelho>[]) : [];
+  if (pecasPersistidas.length > 0) {
+    inputs.pecasEspelho = pecasPersistidas.map((p, i) => ({
+      id: typeof p.id === "string" ? p.id : `peca-${i + 1}`,
+      largura: numeroOu(p.largura, 1),
+      altura: numeroOu(p.altura, 1),
+      quantidade: Math.max(1, Math.round(numeroOu(p.quantidade, 1))),
+    }));
+  } else {
+    // Formato antigo do Espelho (uma medida única por item): vira 1 peça.
+    inputs.pecasEspelho = [
+      {
+        id: "peca-1",
+        largura: numeroOu(r.larguraEspelho, 1),
+        altura: numeroOu(r.alturaEspelho, 1),
+        quantidade: Math.max(1, Math.round(numeroOu(r.quantidade, 1))),
+      },
+    ];
+  }
+  // Campos legados só servem pra migração acima — não seguem adiante no rascunho.
+  delete inputs.larguraEspelho;
+  delete inputs.alturaEspelho;
+
+  return inputs;
+}
+
 function nomeItemPadrao(modeloId: string, indice: number) {
-  if (modeloId === "box") return `Box ${indice}`;
+  if (modeloId === "box" || modeloId === "boxFlex") return `Box ${indice}`;
   if (modeloId === "espelho") return `Espelho ${indice}`;
   return `Item ${indice}`;
 }
@@ -533,7 +582,7 @@ function criarItemCarrinho(modeloId = "slim", ambiente = "Item 1"): ItemOrcament
     id: crypto.randomUUID(),
     ambiente,
     modeloId,
-    inputs: { ...INPUTS_ITEM_INICIAL, vaos: [criarVaoPadrao()] },
+    inputs: { ...INPUTS_ITEM_INICIAL, vaos: [criarVaoPadrao()], pecasEspelho: [criarPecaEspelhoPadrao()] },
   };
 }
 
@@ -543,15 +592,63 @@ function criarItemCarrinhoInicial(): ItemOrcamentoDetalhado {
     id: "item-1",
     ambiente: "Item 1",
     modeloId: "slim",
-    inputs: { ...INPUTS_ITEM_INICIAL, vaos: [{ id: "vao-1", largura: 1, altura: 2.1, tipo: "Fixo" }] },
+    inputs: {
+      ...INPUTS_ITEM_INICIAL,
+      vaos: [{ id: "vao-1", largura: 1, altura: 2.1, tipo: "Fixo" }],
+      pecasEspelho: [{ id: "peca-1", largura: 1, altura: 1, quantidade: 1 }],
+    },
   };
 }
 
 /**
+ * Normaliza um carrinho COMPLETO vindo de qualquer fonte e de qualquer época (rascunho
+ * no localStorage, ou `dados` de um orçamento salvo no Supabase): reconhece o formato
+ * atual ({ itens, tipoRT, valorRT }) e o antigo "single-item" (um ProjectInputs direto,
+ * com a RT dentro dele — o modelo não era salvo nesse formato, assume "slim"), normaliza
+ * cada item e garante pelo menos 1 item. É a ÚNICA porta de entrada de dados externos
+ * no rascunho — usada tanto pelo merge() quanto por setDraft() (Abrir em "Meus
+ * Orçamentos"). Antes, abrir um orçamento salvo no formato antigo quebrava a tela
+ * (`dados.itens` undefined).
+ */
+export function normalizarDadosDetalhado(raw: unknown): OrcamentoDetalhadoDados {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const tipoRT: TipoRT = r.tipoRT === "percentual" ? "percentual" : "fixo";
+  const valorRT = numeroOu(r.valorRT, 0);
+
+  if (Array.isArray(r.itens)) {
+    const itens: ItemOrcamentoDetalhado[] = (r.itens as Partial<ItemOrcamentoDetalhado>[]).map((item, i) => ({
+      id: typeof item.id === "string" ? item.id : `item-${i + 1}`,
+      ambiente: typeof item.ambiente === "string" ? item.ambiente : `Item ${i + 1}`,
+      modeloId: typeof item.modeloId === "string" ? item.modeloId : "slim",
+      inputs: normalizarInputsItem(item.inputs),
+    }));
+    return { itens: itens.length > 0 ? itens : [criarItemCarrinhoInicial()], tipoRT, valorRT };
+  }
+
+  if (Array.isArray(r.vaos)) {
+    return {
+      itens: [{ id: "item-1", ambiente: "Item 1", modeloId: "slim", inputs: normalizarInputsItem(r) }],
+      tipoRT,
+      valorRT,
+    };
+  }
+
+  return { itens: [criarItemCarrinhoInicial()], tipoRT: "fixo", valorRT: 0 };
+}
+
+function patchInputsDoItem(
+  itens: ItemOrcamentoDetalhado[],
+  id: string,
+  patch: (inputs: ProjectInputs) => Partial<ProjectInputs>
+): ItemOrcamentoDetalhado[] {
+  return itens.map((i) => (i.id === id ? { ...i, inputs: { ...i.inputs, ...patch(i.inputs) } } : i));
+}
+
+/**
  * Rascunho do Orçamento Detalhado — desde a reforma "Carrinho" (2026-09-01), um
- * projeto tem múltiplos itens independentes (Divisória/Box/Espelho), cada um com seu
- * próprio modelo e inputs. A Reserva Técnica deixou de ser por item e passou a ser do
- * PROJETO INTEIRO (tipoRT/valorRT aqui no nível do draft, não mais dentro de cada
+ * projeto tem múltiplos itens independentes (Divisória/Box/Box Flex/Espelho), cada um
+ * com seu próprio modelo e inputs. A Reserva Técnica deixou de ser por item e passou a
+ * ser do PROJETO INTEIRO (tipoRT/valorRT aqui no nível do draft, não mais dentro de cada
  * `inputs`) — ver `calcularResumoCarrinho` em lib/useCalculator.ts.
  */
 interface OrcamentoDetalhadoDraftStore {
@@ -561,6 +658,8 @@ interface OrcamentoDetalhadoDraftStore {
   valorRT: number;
   addItem: (modeloId?: string) => void;
   removeItem: (id: string) => void;
+  /** Cópia do item logo depois do original (ids novos pra vãos/peças), vira o item ativo. */
+  duplicarItem: (id: string) => void;
   renomearItem: (id: string, ambiente: string) => void;
   trocarModeloItem: (id: string, modeloId: string) => void;
   selecionarItem: (id: string) => void;
@@ -568,9 +667,12 @@ interface OrcamentoDetalhadoDraftStore {
   addVaoItem: (id: string) => void;
   updateVaoItem: (id: string, vaoId: string, vao: Vao) => void;
   removeVaoItem: (id: string, vaoId: string) => void;
+  addPecaEspelhoItem: (id: string) => void;
+  updatePecaEspelhoItem: (id: string, pecaId: string, peca: PecaEspelho) => void;
+  removePecaEspelhoItem: (id: string, pecaId: string) => void;
   setRT: (tipoRT: TipoRT, valorRT: number) => void;
-  /** Substitui o carrinho inteiro — usado ao "Abrir" um orçamento salvo (Meus Orçamentos). */
-  setDraft: (dados: OrcamentoDetalhadoDados) => void;
+  /** Substitui o carrinho inteiro (normalizando o payload) — usado ao "Abrir" um orçamento salvo. */
+  setDraft: (dados: unknown) => void;
   reset: () => void;
 }
 
@@ -593,6 +695,24 @@ export const useOrcamentoDetalhadoDraft = create<OrcamentoDetalhadoDraftStore>()
           const itemAtivoId = state.itemAtivoId === id ? itens[0].id : state.itemAtivoId;
           return { itens, itemAtivoId };
         }),
+      duplicarItem: (id) =>
+        set((state) => {
+          const indice = state.itens.findIndex((i) => i.id === id);
+          if (indice < 0) return state;
+          const original = state.itens[indice];
+          const copia: ItemOrcamentoDetalhado = {
+            id: crypto.randomUUID(),
+            ambiente: `${original.ambiente || "Item"} (cópia)`,
+            modeloId: original.modeloId,
+            inputs: {
+              ...original.inputs,
+              vaos: original.inputs.vaos.map((v) => ({ ...v, id: crypto.randomUUID() })),
+              pecasEspelho: original.inputs.pecasEspelho.map((p) => ({ ...p, id: crypto.randomUUID() })),
+            },
+          };
+          const itens = [...state.itens.slice(0, indice + 1), copia, ...state.itens.slice(indice + 1)];
+          return { itens, itemAtivoId: copia.id };
+        }),
       renomearItem: (id, ambiente) =>
         set((state) => ({ itens: state.itens.map((i) => (i.id === id ? { ...i, ambiente } : i)) })),
       trocarModeloItem: (id, modeloId) =>
@@ -602,34 +722,50 @@ export const useOrcamentoDetalhadoDraft = create<OrcamentoDetalhadoDraftStore>()
         set((state) => ({ itens: state.itens.map((i) => (i.id === id ? { ...i, inputs } : i)) })),
       addVaoItem: (id) =>
         set((state) => ({
-          itens: state.itens.map((i) =>
-            i.id === id ? { ...i, inputs: { ...i.inputs, vaos: [...i.inputs.vaos, criarVaoPadrao()] } } : i
-          ),
+          itens: patchInputsDoItem(state.itens, id, (inputs) => ({ vaos: [...inputs.vaos, criarVaoPadrao()] })),
         })),
       updateVaoItem: (id, vaoId, vao) =>
         set((state) => ({
-          itens: state.itens.map((i) =>
-            i.id === id
-              ? { ...i, inputs: { ...i.inputs, vaos: i.inputs.vaos.map((v) => (v.id === vaoId ? vao : v)) } }
-              : i
-          ),
+          itens: patchInputsDoItem(state.itens, id, (inputs) => ({
+            vaos: inputs.vaos.map((v) => (v.id === vaoId ? vao : v)),
+          })),
         })),
       removeVaoItem: (id, vaoId) =>
         set((state) => ({
-          itens: state.itens.map((i) =>
-            i.id === id
-              ? { ...i, inputs: { ...i.inputs, vaos: i.inputs.vaos.filter((v) => v.id !== vaoId) } }
-              : i
-          ),
+          itens: patchInputsDoItem(state.itens, id, (inputs) => ({
+            vaos: inputs.vaos.filter((v) => v.id !== vaoId),
+          })),
+        })),
+      addPecaEspelhoItem: (id) =>
+        set((state) => ({
+          itens: patchInputsDoItem(state.itens, id, (inputs) => ({
+            pecasEspelho: [...inputs.pecasEspelho, criarPecaEspelhoPadrao()],
+          })),
+        })),
+      updatePecaEspelhoItem: (id, pecaId, peca) =>
+        set((state) => ({
+          itens: patchInputsDoItem(state.itens, id, (inputs) => ({
+            pecasEspelho: inputs.pecasEspelho.map((p) => (p.id === pecaId ? peca : p)),
+          })),
+        })),
+      removePecaEspelhoItem: (id, pecaId) =>
+        set((state) => ({
+          itens: patchInputsDoItem(state.itens, id, (inputs) => ({
+            // Sempre sobra pelo menos 1 peça — um Espelho sem peça não tem o que cobrar.
+            pecasEspelho:
+              inputs.pecasEspelho.length > 1 ? inputs.pecasEspelho.filter((p) => p.id !== pecaId) : inputs.pecasEspelho,
+          })),
         })),
       setRT: (tipoRT, valorRT) => set({ tipoRT, valorRT }),
-      setDraft: (dados) =>
+      setDraft: (dados) => {
+        const normalizado = normalizarDadosDetalhado(dados);
         set({
-          itens: dados.itens.length > 0 ? dados.itens : [criarItemCarrinho()],
-          itemAtivoId: dados.itens[0]?.id ?? "",
-          tipoRT: dados.tipoRT,
-          valorRT: dados.valorRT,
-        }),
+          itens: normalizado.itens,
+          itemAtivoId: normalizado.itens[0].id,
+          tipoRT: normalizado.tipoRT,
+          valorRT: normalizado.valorRT,
+        });
+      },
       reset: () => {
         const novo = criarItemCarrinho();
         set({ itens: [novo], itemAtivoId: novo.id, tipoRT: "fixo", valorRT: 0 });
@@ -638,65 +774,26 @@ export const useOrcamentoDetalhadoDraft = create<OrcamentoDetalhadoDraftStore>()
     {
       name: "autocalculo-conceito:rascunho-detalhado",
       skipHydration: true,
-      // Rascunhos salvos antes da reforma "Carrinho" tinham um único `inputs` (sem
-      // array de itens, sem RT no nível do draft — RT vinha dentro do próprio inputs).
-      // Aqui migramos ambos os formatos com cuidado pra não perder nada já salvo.
+      // Rascunhos de qualquer época (formato atual com itens[], ou o antigo "single-item"
+      // com um único `inputs`) passam pela mesma normalização de setDraft — ver
+      // normalizarDadosDetalhado acima.
       merge: (persisted, current) => {
         const persistedState = persisted as
-          | {
-              itens?: ItemOrcamentoDetalhado[];
-              itemAtivoId?: string;
-              tipoRT?: TipoRT;
-              valorRT?: number;
-              inputs?: (Partial<ProjectInputs> & { tipoRT?: TipoRT; valorRT?: number }) | undefined;
-            }
+          | { itens?: unknown; itemAtivoId?: unknown; inputs?: unknown }
           | undefined;
         if (!persistedState) return current;
 
-        // Já no formato de carrinho: backfill de campos novos em cada item (Box/Espelho,
-        // se ainda não existiam) sem perder nada do que já foi customizado.
-        if (Array.isArray(persistedState.itens)) {
-          const itens = persistedState.itens.map((item) => ({
-            ...item,
-            inputs: { ...INPUTS_ITEM_INICIAL, ...item.inputs },
-          }));
-          const itensFinal = itens.length > 0 ? itens : current.itens;
-          return {
-            ...current,
-            itens: itensFinal,
-            itemAtivoId:
-              persistedState.itemAtivoId && itensFinal.some((i) => i.id === persistedState.itemAtivoId)
-                ? persistedState.itemAtivoId
-                : itensFinal[0].id,
-            tipoRT: persistedState.tipoRT === "percentual" ? "percentual" : "fixo",
-            valorRT: typeof persistedState.valorRT === "number" ? persistedState.valorRT : 0,
-          };
-        }
+        const fonte = Array.isArray(persistedState.itens) ? persistedState : persistedState.inputs;
+        if (!fonte) return current;
 
-        // Formato antigo (pré-carrinho, "single-item"): o único `inputs` salvo vira o
-        // primeiro item da lista, e a RT que morava dentro dele sobe pro nível do draft.
-        // O modelo usado antigamente vivia só no useModeloStore (global, fora deste
-        // draft) — não dá pra recuperar com certeza aqui, então assume "slim" (era o
-        // padrão original da tela) como fallback; o usuário troca o modelo do item pelo
-        // seletor, se precisar.
-        if (persistedState.inputs) {
-          const antigo = persistedState.inputs;
-          const item: ItemOrcamentoDetalhado = {
-            id: "item-1",
-            ambiente: "Item 1",
-            modeloId: "slim",
-            inputs: { ...INPUTS_ITEM_INICIAL, ...antigo },
-          };
-          return {
-            ...current,
-            itens: [item],
-            itemAtivoId: item.id,
-            tipoRT: antigo.tipoRT === "percentual" ? "percentual" : "fixo",
-            valorRT: typeof antigo.valorRT === "number" ? antigo.valorRT : 0,
-          };
-        }
+        const dados = normalizarDadosDetalhado(fonte);
+        const itemAtivoId =
+          typeof persistedState.itemAtivoId === "string" &&
+          dados.itens.some((i) => i.id === persistedState.itemAtivoId)
+            ? persistedState.itemAtivoId
+            : dados.itens[0].id;
 
-        return current;
+        return { ...current, itens: dados.itens, itemAtivoId, tipoRT: dados.tipoRT, valorRT: dados.valorRT };
       },
     }
   )
@@ -707,18 +804,71 @@ const INPUTS_SIMPLIFICADO_INICIAL: SimplifiedInputs = {
   opcionaisPorModelo: {},
   tipoRT: "fixo",
   valorRT: 0,
-  // Sacada, Box e Espelho não têm cálculo por m² de verdade (valorM2 é placeholder 0) —
-  // ficam de fora do comparador por padrão. Usuário pode reativar qualquer um a
-  // qualquer momento no Painel de Seleção.
+  // Sacada, Box, Box Flex e Espelho não têm cálculo por m² de verdade (valorM2 é
+  // placeholder 0) — ficam de fora do comparador por padrão. Usuário pode reativar
+  // qualquer um a qualquer momento no Painel de Seleção.
   modelosDesmarcados: ["sacada", "box", "boxFlex", "espelho"],
 };
 
 /** Ids de modelo sem m² de verdade, adicionados depois de usuários já terem um rascunho
- * salvo — sempre unidos ao array persistido no merge(), pra não aparecerem de surpresa
- * no comparador de quem já usava o Simplificado antes deles existirem (mesmo raciocínio
- * já aplicado à Sacada). Nunca reintroduz um id que o usuário já tenha reativado, porque
- * não dá pra ter removido da lista algo que ainda não existia. */
+ * salvo — sempre unidos ao array persistido na normalização, pra não aparecerem de
+ * surpresa no comparador de quem já usava o Simplificado antes deles existirem (mesmo
+ * raciocínio já aplicado à Sacada). Nunca reintroduz um id que o usuário já tenha
+ * reativado, porque não dá pra ter removido da lista algo que ainda não existia. */
 const MODELOS_SEM_M2_RETROATIVOS = ["box", "boxFlex", "espelho"];
+
+/**
+ * Normaliza os inputs do Simplificado vindos de qualquer fonte e de qualquer época
+ * (rascunho no localStorage ou `dados` de um orçamento salvo): largura/altura únicos
+ * (pré-vãos múltiplos) → vaos[]; opcionais globais (pré-"por modelo") → opcionaisPorModelo;
+ * campos ausentes (tipoRT/valorRT/modelosDesmarcados, adicionados depois) → padrão.
+ * Única porta de entrada de dados externos — usada pelo merge() e por setDraft().
+ * Antes, abrir um orçamento salvo antes do Comparador Seletivo quebrava a tela
+ * (`modelosDesmarcados` undefined).
+ */
+export function normalizarSimplifiedInputs(raw: unknown): SimplifiedInputs {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+
+  const vaos: VaoSimples[] = Array.isArray(r.vaos)
+    ? (r.vaos as Partial<VaoSimples>[]).map((v, i) => ({
+        id: typeof v.id === "string" ? v.id : `vao-simples-${i + 1}`,
+        largura: numeroOu(v.largura, 1),
+        altura: numeroOu(v.altura, 2.1),
+      }))
+    : [{ id: "vao-simples-1", largura: numeroOu(r.largura, 1), altura: numeroOu(r.altura, 2.1) }];
+
+  let opcionaisPorModelo: Record<string, OpcionaisSimplificado>;
+  if (r.opcionaisPorModelo && typeof r.opcionaisPorModelo === "object") {
+    // Preenche com o padrão qualquer campo ausente (ex.: qtdNoitesInstalacao, adicionado
+    // depois) em entradas salvas antes dele existir.
+    opcionaisPorModelo = Object.fromEntries(
+      Object.entries(r.opcionaisPorModelo as Record<string, Partial<OpcionaisSimplificado>>).map(
+        ([modeloId, o]) => [modeloId, { ...OPCIONAIS_PADRAO, ...o }]
+      )
+    );
+  } else {
+    // Formato anterior tinha opcionais únicos (globais) em vez de por modelo — aplica a
+    // mesma seleção antiga a todos os modelos-semente.
+    const opcionaisGlobaisAntigos: OpcionaisSimplificado = {
+      ...OPCIONAIS_PADRAO,
+      incluirPelicula: Boolean(r.incluirPelicula),
+      incluirLaDeVidro: Boolean(r.incluirLaDeVidro),
+      qtdPortaPremium: numeroOu(r.qtdPortaPremium, 0),
+    };
+    opcionaisPorModelo = Object.fromEntries(SEED_MODELOS.map((m) => [m.id, opcionaisGlobaisAntigos]));
+  }
+
+  const tipoRT: TipoRT = r.tipoRT === "percentual" ? "percentual" : "fixo";
+  const valorRT = numeroOu(r.valorRT, 0);
+  const modelosDesmarcadosBase = Array.isArray(r.modelosDesmarcados)
+    ? (r.modelosDesmarcados as unknown[]).filter((id): id is string => typeof id === "string")
+    : INPUTS_SIMPLIFICADO_INICIAL.modelosDesmarcados;
+  // Box/Box Flex/Espelho nunca podem ter sido removidos deliberadamente de uma lista que
+  // ainda não os conhecia — sempre seguro unir.
+  const modelosDesmarcados = Array.from(new Set([...modelosDesmarcadosBase, ...MODELOS_SEM_M2_RETROATIVOS]));
+
+  return { vaos, opcionaisPorModelo, tipoRT, valorRT, modelosDesmarcados };
+}
 
 interface OrcamentoSimplificadoDraftStore {
   inputs: SimplifiedInputs;
@@ -727,6 +877,8 @@ interface OrcamentoSimplificadoDraftStore {
   updateVao: (id: string, vao: VaoSimples) => void;
   removeVao: (id: string) => void;
   setOpcionaisModelo: (modeloId: string, opcionais: Partial<OpcionaisSimplificado>) => void;
+  /** Substitui o rascunho inteiro (normalizando o payload) — usado ao "Abrir" um orçamento salvo. */
+  setDraft: (dados: unknown) => void;
   reset: () => void;
 }
 
@@ -760,62 +912,16 @@ export const useOrcamentoSimplificadoDraft = create<OrcamentoSimplificadoDraftSt
             },
           },
         })),
+      setDraft: (dados) => set({ inputs: normalizarSimplifiedInputs(dados) }),
       reset: () => set({ inputs: { ...INPUTS_SIMPLIFICADO_INICIAL, vaos: [criarVaoSimples()] } }),
     }),
     {
       name: "autocalculo-conceito:rascunho-simplificado",
       skipHydration: true,
       merge: (persisted, current) => {
-        const persistedState = persisted as { inputs?: Record<string, unknown> } | undefined;
-        const raw = persistedState?.inputs;
-        if (!raw) return current;
-
-        // Formatos antigos tinham largura/altura únicos (pré-vãos múltiplos) em vez de vaos[].
-        const vaos: VaoSimples[] = Array.isArray(raw.vaos)
-          ? (raw.vaos as VaoSimples[])
-          : [
-              {
-                id: "vao-simples-1",
-                largura: typeof raw.largura === "number" ? raw.largura : 1,
-                altura: typeof raw.altura === "number" ? raw.altura : 2.1,
-              },
-            ];
-
-        // Formato anterior tinha opcionais únicos (globais) em vez de por modelo.
-        // Migra aplicando a mesma seleção anterior a todos os modelos já cadastrados.
-        let opcionaisPorModelo: Record<string, OpcionaisSimplificado>;
-        if (raw.opcionaisPorModelo && typeof raw.opcionaisPorModelo === "object") {
-          // Preenche com o padrão qualquer campo ausente (ex.: qtdNoitesInstalacao, adicionado
-          // depois) em entradas salvas antes dele existir.
-          opcionaisPorModelo = Object.fromEntries(
-            Object.entries(raw.opcionaisPorModelo as Record<string, Partial<OpcionaisSimplificado>>).map(
-              ([modeloId, o]) => [modeloId, { ...OPCIONAIS_PADRAO, ...o }]
-            )
-          );
-        } else {
-          const opcionaisGlobaisAntigos: OpcionaisSimplificado = {
-            ...OPCIONAIS_PADRAO,
-            incluirPelicula: Boolean(raw.incluirPelicula),
-            incluirLaDeVidro: Boolean(raw.incluirLaDeVidro),
-            qtdPortaPremium: typeof raw.qtdPortaPremium === "number" ? raw.qtdPortaPremium : 0,
-          };
-          opcionaisPorModelo = Object.fromEntries(
-            SEED_MODELOS.map((m) => [m.id, opcionaisGlobaisAntigos])
-          );
-        }
-
-        const tipoRT: TipoRT = raw.tipoRT === "percentual" ? "percentual" : "fixo";
-        const valorRT = typeof raw.valorRT === "number" ? raw.valorRT : 0;
-        const modelosDesmarcadosBase = Array.isArray(raw.modelosDesmarcados)
-          ? (raw.modelosDesmarcados as string[])
-          : INPUTS_SIMPLIFICADO_INICIAL.modelosDesmarcados;
-        // Box/Espelho nunca podem ter sido removidos deliberadamente de uma lista que
-        // ainda não os conhecia — sempre seguro unir.
-        const modelosDesmarcados = Array.from(
-          new Set([...modelosDesmarcadosBase, ...MODELOS_SEM_M2_RETROATIVOS])
-        );
-
-        return { ...current, inputs: { vaos, opcionaisPorModelo, tipoRT, valorRT, modelosDesmarcados } };
+        const persistedState = persisted as { inputs?: unknown } | undefined;
+        if (!persistedState?.inputs) return current;
+        return { ...current, inputs: normalizarSimplifiedInputs(persistedState.inputs) };
       },
     }
   )

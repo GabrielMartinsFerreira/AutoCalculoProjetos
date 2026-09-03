@@ -106,6 +106,19 @@ export interface Vao {
 }
 
 /**
+ * Uma peça de espelho dentro de um item "Espelhos" do carrinho: medida própria +
+ * quantidade de peças idênticas a essa medida. Um item pode ter várias peças de
+ * medidas diferentes (mesmo acabamento/modelo) — não precisa mais de um item por
+ * medida.
+ */
+export interface PecaEspelho {
+  id: string;
+  largura: number;
+  altura: number;
+  quantidade: number;
+}
+
+/**
  * Inputs de UM item do carrinho do Orçamento Detalhado. O mesmo formato serve pros três
  * tipos de item (Divisória, Box, Espelho) — cada estratégia (lib/calculators) só lê os
  * campos que lhe interessam, os demais ficam com o valor padrão e são ignorados. Isso
@@ -129,12 +142,23 @@ export interface ProjectInputs {
   qtdCaixaArCondicionado: number;
   /** m² do respiro de alumínio — digitado manualmente, independente da área dos vãos. */
   m2RespiroAluminio: number;
+  /** Kit da Sacada em cor diferente da padrão: +15% sobre o subtotal dos kits (só o kit, não o vidro). */
+  kitCorDiferenteSacada: boolean;
   /** Box Padrão — só usado quando o item do carrinho tem modeloId === "box". */
   medidaFrontalBox: MedidaFrontalBox | null;
   tipoPagamentoBox: TipoPagamentoBox;
-  /** Espelhos — só usado quando o item do carrinho tem modeloId === "espelho". */
-  larguraEspelho: number;
-  alturaEspelho: number;
+  /**
+   * Espelhos — só usado quando o item do carrinho tem modeloId === "espelho". Várias
+   * peças (medidas diferentes, mesmo modelo/acabamento) num item só.
+   */
+  pecasEspelho: PecaEspelho[];
+  /**
+   * @deprecated Formato antigo (uma medida única por item). Mantidos como opcionais só
+   * pra `normalizarInputsItem` (lib/store.ts) migrar payloads salvos antes de
+   * `pecasEspelho` existir — nunca escreva neles em código novo.
+   */
+  larguraEspelho?: number;
+  alturaEspelho?: number;
   /** Uma das chaves de MODELOS_BASE_ESPELHO (lib/calculators/espelho.ts), ou null. */
   espelhoModeloBase: ProductKey | null;
   /** Uma das chaves de MODELOS_ESPECIAIS_ESPELHO — quando definido, anula o modelo base. */
@@ -146,12 +170,12 @@ export interface ProjectInputs {
   /** +20% sobre o subtotal base do vidro do espelho. */
   incluirJuncaoRevestimentoEspelho: boolean;
   /**
-   * Multiplicador de unidades idênticas — lido pelo Espelho e pelo Box Flex (várias
-   * peças com mesma medida/acabamento num item só, em vez de um item por peça no
-   * carrinho). Opcional (com fallback pra 1 em todo lugar que lê) porque orçamentos
-   * salvos no Supabase antes desse campo existir não passam pelo merge() do Zustand ao
-   * serem reabertos — só rascunhos em localStorage passam. Outras estratégias (Slim,
-   * MiterGlass, Box Padrão...) simplesmente não leem este campo.
+   * Multiplicador de unidades idênticas — lido pelo Box Flex (N boxes iguais num item
+   * só). No Espelho a quantidade passou a ser POR PEÇA (`PecaEspelho.quantidade`); aqui
+   * fica só como legado pra migrar payloads antigos de Espelho. Opcional (fallback 1 em
+   * todo lugar que lê) porque orçamentos salvos no Supabase antes desse campo existir
+   * também passam por `normalizarInputsItem`, mas payloads antigos ainda podem chegar
+   * sem ele. Outras estratégias (Slim, MiterGlass, Box Padrão...) não leem este campo.
    */
   quantidade?: number;
   /**

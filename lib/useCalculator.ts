@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { EMPTY_PRODUCTS, useOrcamentoDetalhadoDraft, useProductStore } from "./store";
-import { obterEstrategia } from "./calculators";
-import { areaCobradaEspelho, quantidadeEspelho } from "./calculators/espelho";
+import { ehItemFechado, obterEstrategia } from "./calculators";
+import { areaCobradaTotalEspelho, totalEspelhosDoItem } from "./calculators/espelho";
 import type {
   CalculoItem,
   ItemOrcamentoDetalhado,
@@ -21,10 +21,10 @@ function areaTotal(vaos: Vao[]) {
  * Calcula o orçamento de UM item do carrinho: itens estruturais vêm da estratégia do
  * modelo (lib/calculators) — cada modelo pode ter sua própria fórmula. Ferragens e
  * opcionais universais abaixo só se aplicam a itens do tipo "divisória" (qualquer
- * modeloId que não seja "box"/"espelho" — ambos têm preço fechado ou adicionais
- * próprios, ver seção 4 do CLAUDE.md). A Reserva Técnica NÃO é calculada aqui — desde a
- * reforma "Carrinho" ela é global do projeto inteiro, aplicada uma única vez sobre o
- * Total Geral em `calcularResumoCarrinho`, não mais por item.
+ * modeloId fora de `MODELOS_FECHADOS` — Box, Box Flex e Espelho têm preço fechado ou
+ * adicionais próprios, ver seção 4 do CLAUDE.md). A Reserva Técnica NÃO é calculada
+ * aqui — desde a reforma "Carrinho" ela é global do projeto inteiro, aplicada uma única
+ * vez sobre o Total Geral em `calcularResumoCarrinho`, não mais por item.
  *
  * REGRA DE OURO: todo subtotal é arredondado (Math.round) neste ponto, no core — a
  * partir daqui o sistema nunca mais trabalha com centavos em nenhum item ou subtotal.
@@ -42,12 +42,12 @@ export function calcularOrcamento(
   const estrategia = obterEstrategia(modeloId);
   const itens: CalculoItem[] = [...estrategia.calcularEstrutura(inputs, getValor)];
 
-  // Box (e Box Flex) têm preço fechado/fórmula própria e Espelho tem seus próprios
+  // Box/Box Flex têm preço fechado ou fórmula própria e Espelho tem seus próprios
   // adicionais (grupo dedicado abaixo) — nenhum deles usa ferragens/opcionais
-  // "universais" de divisória.
-  const ehItemFechado = modeloId === "box" || modeloId === "boxFlex" || modeloId === "espelho";
+  // "universais" de divisória. Regra centralizada em lib/calculators/index.ts.
+  const itemFechado = ehItemFechado(modeloId);
 
-  if (!ehItemFechado) {
+  if (!itemFechado) {
     itens.push(
       {
         label: "Puxador H 40cm",
@@ -127,50 +127,48 @@ export function calcularOrcamento(
 
   // Adicionais exclusivos do Espelho — mesmo padrão de isolamento da Sacada acima. Cada
   // quantidade informada (qtdRecorteCxLuzEspelho etc.) é POR PEÇA de espelho — o total
-  // cobrado multiplica ainda pela quantidade de espelhos idênticos do item (mesma regra
-  // do subtotal estrutural em lib/calculators/espelho.ts). Math.round aplicado logo na
-  // multiplicação, explícito, mesmo já sendo redundante com o arredondamento central
-  // abaixo (Regra de Ouro) — garante zero centavos já na origem do valor multiplicado.
+  // cobrado multiplica pelo total de espelhos do item (soma das quantidades de todas as
+  // peças, ver lib/calculators/espelho.ts). O Desembaçador é R$/m² sobre a área
+  // faturável total (Σ área cobrada × quantidade de cada peça). Math.round explícito na
+  // multiplicação, mesmo já sendo redundante com o arredondamento central abaixo.
   if (modeloId === "espelho") {
-    const quantidadeEspelhos = quantidadeEspelho(inputs);
-    const areaEspelho = areaCobradaEspelho(inputs);
+    const totalEspelhos = totalEspelhosDoItem(inputs);
+    const areaTotalEspelho = areaCobradaTotalEspelho(inputs);
     itens.push(
       {
         label: "Desembaçador Elétrico",
         detalhe: inputs.incluirDesembacadorEspelho
-          ? `${areaEspelho.toFixed(2)} m²/un × ${quantidadeEspelhos} un`
+          ? `${areaTotalEspelho.toFixed(2)} m² no total (${totalEspelhos} espelho(s))`
           : "Não incluído",
         subtotal: inputs.incluirDesembacadorEspelho
-          ? Math.round(areaEspelho * getValor("espelhoDesembacador") * quantidadeEspelhos)
+          ? Math.round(areaTotalEspelho * getValor("espelhoDesembacador"))
           : 0,
         grupo: "opcional",
       },
       {
         label: "Recorte CX de Luz",
-        detalhe: `${inputs.qtdRecorteCxLuzEspelho} un/espelho × ${quantidadeEspelhos} un = ${inputs.qtdRecorteCxLuzEspelho * quantidadeEspelhos} un`,
-        subtotal: Math.round(inputs.qtdRecorteCxLuzEspelho * getValor("espelhoRecorteCxLuz") * quantidadeEspelhos),
+        detalhe: `${inputs.qtdRecorteCxLuzEspelho} un/espelho × ${totalEspelhos} espelho(s) = ${inputs.qtdRecorteCxLuzEspelho * totalEspelhos} un`,
+        subtotal: Math.round(inputs.qtdRecorteCxLuzEspelho * getValor("espelhoRecorteCxLuz") * totalEspelhos),
         grupo: "opcional",
       },
       {
         label: "Chassis Perfil U",
-        detalhe: `${inputs.qtdChassisPerfilUEspelho} peça(s)/espelho × ${quantidadeEspelhos} un = ${inputs.qtdChassisPerfilUEspelho * quantidadeEspelhos} peça(s)`,
-        subtotal: Math.round(
-          inputs.qtdChassisPerfilUEspelho * getValor("espelhoChassisPerfilU") * quantidadeEspelhos
-        ),
+        detalhe: `${inputs.qtdChassisPerfilUEspelho} peça(s)/espelho × ${totalEspelhos} espelho(s) = ${inputs.qtdChassisPerfilUEspelho * totalEspelhos} peça(s)`,
+        subtotal: Math.round(inputs.qtdChassisPerfilUEspelho * getValor("espelhoChassisPerfilU") * totalEspelhos),
         grupo: "opcional",
       },
       {
         label: "Touch Screen",
-        detalhe: `${inputs.qtdTouchScreenEspelho} peça(s)/espelho × ${quantidadeEspelhos} un = ${inputs.qtdTouchScreenEspelho * quantidadeEspelhos} peça(s)`,
-        subtotal: Math.round(inputs.qtdTouchScreenEspelho * getValor("espelhoTouchScreen") * quantidadeEspelhos),
+        detalhe: `${inputs.qtdTouchScreenEspelho} peça(s)/espelho × ${totalEspelhos} espelho(s) = ${inputs.qtdTouchScreenEspelho * totalEspelhos} peça(s)`,
+        subtotal: Math.round(inputs.qtdTouchScreenEspelho * getValor("espelhoTouchScreen") * totalEspelhos),
         grupo: "opcional",
       }
     );
   }
 
   // Produtos do catálogo vinculados a um tipo de vão: 1 unidade por vão desse tipo,
-  // automaticamente — Box e Espelho não usam vãos tipados, então não se aplica a eles.
-  if (!ehItemFechado) {
+  // automaticamente — itens fechados não usam vãos tipados, então não se aplica a eles.
+  if (!itemFechado) {
     for (const produto of products) {
       if (!produto.tipoVaoAssociado) continue;
       const qtd = vaos.filter((v) => v.tipo === produto.tipoVaoAssociado).length;

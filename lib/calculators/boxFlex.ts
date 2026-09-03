@@ -81,5 +81,7 @@ export const estrategiaBoxFlex: EstrategiaCalculoModelo = {
   nome: "Box Flex",
   usaTipoVao: false,
   usaCorVidro: false,
+  // Não lê o catálogo: os valores da fórmula são constantes fixas (ver topo do arquivo).
+  chavesCatalogo: [],
   calcularEstrutura,
 };

@@ -1,7 +1,7 @@
-import type { CalculoItem, ProductKey, ProjectInputs } from "../types";
+import type { CalculoItem, PecaEspelho, ProductKey, ProjectInputs } from "../types";
 import type { EstrategiaCalculoModelo, GetValor } from "./types";
 
-/** Área mínima cobrada por espelho, em m² — qualquer peça menor é faturada como se tivesse esse tamanho. */
+/** Área mínima cobrada por peça de espelho, em m² — qualquer peça menor é faturada como se tivesse esse tamanho. */
 export const AREA_MINIMA_M2 = 0.3;
 
 export interface OpcaoModeloEspelho {
@@ -35,35 +35,55 @@ export const MODELOS_ESPECIAIS_ESPELHO: OpcaoModeloEspelho[] = [
   { key: "espelhoMeiaLuaComLed", label: "Meia Lua com Led" },
 ];
 
-/**
- * Área efetivamente cobrada (aplica o piso de AREA_MINIMA_M2) — usada tanto pro vidro em
- * si quanto pelo Desembaçador Elétrico (também R$/m², ver lib/useCalculator.ts), pra
- * manter uma única noção de "área faturável" do espelho. É a área de UMA peça — a
- * quantidade (ver `quantidadeEspelho` abaixo) multiplica por fora, não altera o piso.
- */
-export function areaCobradaEspelho(inputs: Pick<ProjectInputs, "larguraEspelho" | "alturaEspelho">) {
-  return Math.max(inputs.larguraEspelho * inputs.alturaEspelho, AREA_MINIMA_M2);
+/** Chaves de catálogo que a fórmula estrutural do Espelho lê (modelos base + especiais). */
+export const CHAVES_MODELOS_ESPELHO: ProductKey[] = [...MODELOS_BASE_ESPELHO, ...MODELOS_ESPECIAIS_ESPELHO].map(
+  (m) => m.key
+);
+
+/** Quantidade de UMA peça — sempre inteiro >= 1 (ausente, zero, negativo ou fracionário cai pra 1). */
+export function quantidadePeca(peca: Pick<PecaEspelho, "quantidade">): number {
+  return Math.max(1, Math.round(peca.quantidade ?? 1));
 }
 
 /**
- * Quantidade de espelhos idênticos (mesma medida/acabamento) representados por este
- * item — multiplicador de unidades, pra cotar várias peças iguais num item só do
- * carrinho em vez de duplicar o item várias vezes. Sempre >= 1 (inteiro): ausente,
- * zerado, negativo ou fracionário (dado antigo sem o campo, ou edição inválida na UI)
- * cai pro mínimo de 1 peça. Exportada porque lib/useCalculator.ts usa o mesmo piso pros
- * adicionais do espelho (Desembaçador/Recorte/Chassis/Touch Screen), que também são
- * "por peça" e precisam ser multiplicados pela mesma quantidade.
+ * Área efetivamente cobrada de UMA peça (aplica o piso de AREA_MINIMA_M2) — a quantidade
+ * multiplica por fora, não altera o piso de nenhuma peça individual.
  */
-export function quantidadeEspelho(inputs: Pick<ProjectInputs, "quantidade">): number {
-  return Math.max(1, Math.round(inputs.quantidade ?? 1));
+export function areaCobradaPeca(peca: Pick<PecaEspelho, "largura" | "altura">): number {
+  return Math.max(peca.largura * peca.altura, AREA_MINIMA_M2);
+}
+
+/**
+ * Peças do item. Fallback pro formato antigo (larguraEspelho/alturaEspelho/quantidade —
+ * uma medida única por item): payloads salvos antes de `pecasEspelho` existir passam por
+ * `normalizarInputsItem` (lib/store.ts) ao serem abertos, mas o cálculo também se
+ * protege sozinho, pra nunca quebrar com um objeto de outra época.
+ */
+export function pecasDoEspelho(inputs: ProjectInputs): PecaEspelho[] {
+  if (Array.isArray(inputs.pecasEspelho) && inputs.pecasEspelho.length > 0) return inputs.pecasEspelho;
+  return [
+    {
+      id: "legado",
+      largura: inputs.larguraEspelho ?? 1,
+      altura: inputs.alturaEspelho ?? 1,
+      quantidade: inputs.quantidade ?? 1,
+    },
+  ];
+}
+
+/** Total de espelhos do item (soma das quantidades de todas as peças) — base dos adicionais "por peça". */
+export function totalEspelhosDoItem(inputs: ProjectInputs): number {
+  return pecasDoEspelho(inputs).reduce((acc, p) => acc + quantidadePeca(p), 0);
+}
+
+/** Área faturável total do item (Σ área cobrada × quantidade de cada peça) — base do Desembaçador (R$/m²). */
+export function areaCobradaTotalEspelho(inputs: ProjectInputs): number {
+  return pecasDoEspelho(inputs).reduce((acc, p) => acc + areaCobradaPeca(p) * quantidadePeca(p), 0);
 }
 
 function calcularEstrutura(inputs: ProjectInputs, getValor: GetValor): CalculoItem[] {
-  const quantidade = quantidadeEspelho(inputs);
-  const areaReal = inputs.larguraEspelho * inputs.alturaEspelho;
-  // Piso de 0,3m² avaliado POR UNIDADE — a quantidade multiplica depois, não infla o piso.
-  const areaCobrada = areaCobradaEspelho(inputs);
-  const areaForcada = areaCobrada > areaReal;
+  const pecas = pecasDoEspelho(inputs);
+  const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
   // Modelo especial (preço fechado) anula o modelo base quando escolhido.
   const especial = MODELOS_ESPECIAIS_ESPELHO.find((m) => m.key === inputs.espelhoModeloEspecial);
@@ -82,33 +102,35 @@ function calcularEstrutura(inputs: ProjectInputs, getValor: GetValor): CalculoIt
   }
 
   const valorM2 = getValor(opcaoEscolhida.key);
-  const subtotalUnitario = areaCobrada * valorM2;
-  // Regra de Ouro: a multiplicação pela quantidade é onde frações de centavo podem
-  // reaparecer (preço/m² com decimais × área × N peças) — arredonda aqui, explicitamente,
-  // antes de somar ao total (redundante com o arredondamento central de
-  // lib/useCalculator.ts sobre todo CalculoItem.subtotal, mas intencional: garante zero
-  // centavos já na origem do valor multiplicado, não só na agregação final).
-  const subtotalBaseTotal = Math.round(subtotalUnitario * quantidade);
-  const valorUnitarioFmt = subtotalUnitario.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-  const valorM2Fmt = valorM2.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const nomeModelo = `${opcaoEscolhida.label}${especial ? " (modelo especial)" : ""}`;
 
-  const itens: CalculoItem[] = [
-    {
-      label: `Espelho — ${opcaoEscolhida.label}${especial ? " (modelo especial)" : ""}`,
-      detalhe: `${quantidade} un × ${valorUnitarioFmt} (${areaReal.toFixed(2)} m²${areaForcada ? ` → mín. ${AREA_MINIMA_M2.toFixed(2)} m²/un` : ""} × ${valorM2Fmt}/m²)`,
-      subtotal: subtotalBaseTotal,
+  // Uma linha por peça (medidas diferentes ficam visíveis pro vendedor). Regra de Ouro:
+  // cada peça já sai arredondada na multiplicação pela quantidade (redundante com o
+  // arredondamento central de lib/useCalculator.ts, mas explícito de propósito).
+  let subtotalBaseTotal = 0;
+  const itens: CalculoItem[] = pecas.map((peca, i) => {
+    const qtd = quantidadePeca(peca);
+    const areaReal = peca.largura * peca.altura;
+    const areaCobrada = areaCobradaPeca(peca);
+    const areaForcada = areaCobrada > areaReal;
+    const subtotalUnitario = areaCobrada * valorM2;
+    const subtotal = Math.round(subtotalUnitario * qtd);
+    subtotalBaseTotal += subtotal;
+    return {
+      label: pecas.length > 1 ? `Espelho #${String(i + 1).padStart(2, "0")} — ${nomeModelo}` : `Espelho — ${nomeModelo}`,
+      detalhe: `${qtd} un × ${fmt(subtotalUnitario)} (${peca.largura.toFixed(2)}×${peca.altura.toFixed(2)}m = ${areaReal.toFixed(2)} m²${areaForcada ? ` → mín. ${AREA_MINIMA_M2.toFixed(2)} m²` : ""} × ${fmt(valorM2)}/m²)`,
+      subtotal,
       grupo: "estrutural",
-    },
-  ];
+    };
+  });
 
-  // Junção/Revestimento/Modelo: +20% sobre o subtotal base do vidro JÁ multiplicado
-  // pela quantidade (matematicamente igual a aplicar por unidade e depois multiplicar)
-  // — não incide sobre os adicionais avulsos abaixo (são hardware itemizado à parte,
-  // ver lib/useCalculator.ts).
+  // Junção/Revestimento/Modelo: +20% sobre o subtotal base do vidro de TODAS as peças
+  // (não incide sobre os adicionais avulsos — desembaçador/recorte/chassis/touch são
+  // hardware itemizado à parte, ver lib/useCalculator.ts).
   if (inputs.incluirJuncaoRevestimentoEspelho) {
     itens.push({
       label: "Junção / Revestimento / Modelo (+20%)",
-      detalhe: `+20% sobre ${subtotalBaseTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} (${quantidade} un já considerada)`,
+      detalhe: `+20% sobre ${fmt(subtotalBaseTotal)} (${pecas.length > 1 ? "todas as peças" : "vidro base"})`,
       subtotal: Math.round(subtotalBaseTotal * 0.2),
       grupo: "estrutural",
     });
@@ -122,5 +144,6 @@ export const estrategiaEspelho: EstrategiaCalculoModelo = {
   nome: "Espelhos",
   usaTipoVao: false,
   usaCorVidro: false,
+  chavesCatalogo: CHAVES_MODELOS_ESPELHO,
   calcularEstrutura,
 };

@@ -14,6 +14,16 @@ function valorDoModelo(products: Product[], key: ProductKey) {
   return products.find((p) => p.key === key)?.valor ?? 0;
 }
 
+/**
+ * Orçamento Simplificado: área total × preço fechado por m² de cada modelo + opcionais
+ * escolhidos por modelo + RT (global na configuração, calculada por modelo).
+ *
+ * REGRA DE OURO (mesma do Detalhado desde 2026-09-01): cada parcela (base, cada
+ * opcional, RT) é arredondada aqui no core, e o total é a soma das parcelas já
+ * redondas — assim o que o card mostra linha a linha sempre fecha com o total mostrado
+ * (antes, cada linha era arredondada só na exibição e a soma visível podia diferir do
+ * total visível em R$1).
+ */
 export function calcularOrcamentoSimplificado(
   inputs: SimplifiedInputs,
   modelos: Modelo[],
@@ -23,16 +33,21 @@ export function calcularOrcamentoSimplificado(
 
   const porModelo = modelos.map((m) => {
     const opcionais = inputs.opcionaisPorModelo[m.id] ?? OPCIONAIS_PADRAO;
-    const custoBase = area * m.valorM2;
+    const custoBase = Math.round(area * m.valorM2);
     const produtosModelo = productsByModelo[m.id] ?? [];
 
-    const custoPelicula = opcionais.incluirPelicula ? area * valorDoModelo(produtosModelo, "pelicula") : 0;
-    const custoLaDeVidro = opcionais.incluirLaDeVidro
-      ? area * valorDoModelo(produtosModelo, "laDeVidro")
-      : 0;
-    const custoPortaPremium = opcionais.qtdPortaPremium * valorDoModelo(produtosModelo, "portaPremium");
-    const custoAdicionalNoturno =
-      opcionais.qtdNoitesInstalacao * valorDoModelo(produtosModelo, "adicionalNoturno");
+    const custoPelicula = Math.round(
+      opcionais.incluirPelicula ? area * valorDoModelo(produtosModelo, "pelicula") : 0
+    );
+    const custoLaDeVidro = Math.round(
+      opcionais.incluirLaDeVidro ? area * valorDoModelo(produtosModelo, "laDeVidro") : 0
+    );
+    const custoPortaPremium = Math.round(
+      opcionais.qtdPortaPremium * valorDoModelo(produtosModelo, "portaPremium")
+    );
+    const custoAdicionalNoturno = Math.round(
+      opcionais.qtdNoitesInstalacao * valorDoModelo(produtosModelo, "adicionalNoturno")
+    );
 
     const itensOpcionais: CalculoItem[] = [
       {
@@ -67,8 +82,9 @@ export function calcularOrcamentoSimplificado(
     // o total (base + opcionais) DESTE modelo — cada card tem sua própria RT em R$,
     // mesmo compartilhando o mesmo tipo/percentual configurado uma única vez na página.
     const totalAntesDoRT = custoBase + custoOpcionaisTotal;
-    const custoRT =
-      inputs.tipoRT === "percentual" ? totalAntesDoRT * (inputs.valorRT / 100) : inputs.valorRT;
+    const custoRT = Math.round(
+      inputs.tipoRT === "percentual" ? totalAntesDoRT * (inputs.valorRT / 100) : inputs.valorRT
+    );
 
     return {
       modeloId: m.id,
