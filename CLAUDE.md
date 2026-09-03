@@ -94,6 +94,7 @@ lib/
   useSimplifiedCalculator.ts    Cálculo do Simplificado: área × valorM2 + opcionais por modelo
   calculators/                  Strategy pattern — uma fórmula estrutural por modelo
     types.ts                    Interface EstrategiaCalculoModelo
+    utils.ts                    calcularPlanoDeCorte() — bin-packing 1D compartilhado (Tubo 2x2/Perfil U)
     slim.ts                     Fórmula Slim (10mm e 8mm — mesma fórmula, catálogo separado)
     miterglass.ts                Fórmula MiterGlass (modulada em peças de ~1m)
     sacada.ts                    Fórmula Sacada (vidro por cor + kit combinado por largura)
@@ -237,39 +238,66 @@ fórmulas totalmente independentes, apesar do nome parecido; nunca compartilham 
 - Tem uma flag `usaCorVidro`: se verdadeiro, mostra um seletor de cor do vidro (Incolor/
   Verde) no cabeçalho do card de Vãos. Hoje só a Sacada usa.
 
+**Plano de Corte compartilhado** (`calcularPlanoDeCorte()`, `lib/calculators/utils.ts`)
+— usado pelo Tubo 2x2 e pelo Perfil U do Slim e do MiterGlass (não pelo Perfil
+Engenharia, que fica fora do escopo, soma linear simples). Bin-packing 1D First Fit
+contra barras de 6m, com uma regra de negócio que a soma linear (`metragemTotal ÷ 6`,
+`Math.ceil`) não tinha: **sobra menor que 2,00m é descartada como retalho assim que
+aparece** — não fica disponível pros próximos cortes, mesmo que um corte *futuro* menor
+ainda coubesse nela (a regra é sobre o tamanho da sobra no momento em que ela surge, não
+uma otimização global do plano inteiro). Corte maior que a barra conta
+`Math.ceil(corte / 6)` barras cheias sem sobra (emenda/barra especial na prática); corte
+`<= 0` não consome barra. Essa regra de descarte é o que corrige o erro de negócio do
+mundo real: a soma linear presumia 100% de reaproveitamento de qualquer sobra, por
+menor que fosse, subestimando o consumo real de barras (relatado pelo usuário: 21
+barras calculadas contra 24 reais numa obra).
+
 **Fórmula Slim (10mm e 8mm — mesma fórmula, `lib/calculators/slim.ts`)**:
 - Vidro = soma de `largura × altura` de cada vão.
-- Perfil U = perímetro total (`2×largura + 2×altura` de cada vão) → barras de 6m
-  (soma linear simples — a peça é vendida por metro corrido, permite emenda).
 - Estrutura em U invertido (laterais + topo, sem o vão de baixo):
   - `Fixo` / `Porta de Abrir`: as duas laterais (altura) + o topo (largura), tudo em
     Tubo 2x2.
   - `Porta de Correr`: só as duas laterais (altura) em Tubo 2x2 — o topo/trilho vira
-    Perfil Engenharia (`largura`, soma linear simples, barras de 6m).
-- **Tubo 2x2 = Plano de Corte, não soma linear** (`planoCorteTubo2x2()` em `slim.ts`):
-  diferente do Perfil U/Perfil Engenharia, o Tubo 2x2 não permite emenda — cada peça
-  (lateral ou topo) tem que sair de uma única barra de 6m, inteira. Por isso o cálculo é
-  um bin-packing 1D (First Fit) sobre os cortes de **cada vão isoladamente** — a sobra
-  de um vão nunca é reaproveitada pelo próximo (cada vão é uma frente de corte
-  separada, como na obra real) — e o total de barras do projeto é a SOMA das barras de
-  cada vão, não um bin-packing sobre a metragem total. Um corte nunca é dividido entre
-  duas barras. Exemplo de referência (validado): vão Fixo de 2,80m×1,00m → cortes
-  [2,80; 2,80; 1,00] → a barra que sobrou 2,80m depois do primeiro corte fica com 0,40m,
-  onde o topo de 1,00m não cabe → abre uma 2ª barra só pro topo → **2 barras (12m
-  cobrados)**, não 6,60m como daria a soma linear antiga.
+    Perfil Engenharia (`largura`, soma linear simples, barras de 6m, fora do escopo do
+    Plano de Corte).
+- **Tubo 2x2 = Plano de Corte isolado por vão** (`planoCorteTubo2x2()` em `slim.ts`,
+  delega pra `calcularPlanoDeCorte()`): diferente do Perfil U, o Tubo 2x2 não permite
+  emenda — cada peça (lateral ou topo) tem que sair de uma única barra de 6m, inteira.
+  Por isso o plano de corte roda **por vão isoladamente** — a sobra de um vão nunca é
+  reaproveitada pelo próximo (cada vão é uma frente de corte separada, como na obra
+  real) — e o total de barras do projeto é a SOMA das barras de cada vão, não um plano
+  de corte único sobre a metragem total. Exemplo de referência (validado): vão Fixo de
+  2,80m×1,00m → cortes [2,80; 2,80; 1,00] → a barra que sobrou 2,80m depois do primeiro
+  corte fica com 0,40m, onde o topo de 1,00m não cabe → abre uma 2ª barra só pro topo →
+  **2 barras (12m cobrados)**.
+- **Perfil U = Plano de Corte único pro projeto inteiro** (não isolado por vão, porque
+  permite emenda entre peças): os cortes de topo, base e as duas laterais de CADA vão
+  (`[largura, largura, altura, altura]`) entram no mesmo plano de corte. Substituiu a
+  soma linear (`perímetro total ÷ 6`) em 2026-09-03. Exemplo de referência (validado):
+  3 vãos de 1×1m → 12 cortes de 1m → a soma linear ingênua diria 2 barras (12m/6m), mas
+  o plano real precisa de **3**: depois do 5º corte de 1m numa barra a sobra vira
+  exatamente 1,00m e é descartada na hora (mesmo cabendo mais um corte de 1m — a regra
+  de descarte não faz lookahead).
 
 **Fórmula MiterGlass (`lib/calculators/miterglass.ts`)** — modulada em peças de ~1m, não
 usa tipo de vão (`usaTipoVao: false`). Múltiplos vãos = tratado como uma parede contínua:
 `L` = soma das larguras, `H` = maior altura entre os vãos; área de vidro soma cada vão
 individualmente.
 - `peças = max(1, round(L))` — 1 peça a cada ~1m de largura.
-- Perfil U: cada peça emoldurada individualmente (`2×larguraPorPeça + 2×H`) × nº peças.
-- Tubo 2x2 = **topo** (`L`, uma vez) **+ verticais** (`peças + 1` verticais de altura `H`
-  cada — as duas bordas externas + uma divisória entre cada peça). Fórmula corrigida em
-  2026-08-28 depois de bater com conta manual do usuário (ver Histórico) — antes só
-  contava os verticais, esquecendo o tubo de cima.
-- Exemplo de referência (validado): 6,00m × 3,00m → 6 peças, Tubo = 6 (topo) + 7×3 = 21
-  (verticais) = 27m → 5 barras de 6m.
+- Tubo 2x2 = **topo** (`L`, um corte só) **+ verticais** (`peças + 1` cortes de altura
+  `H` cada — as duas bordas externas + uma divisória entre cada peça), tudo no MESMO
+  Plano de Corte (não isolado — MiterGlass já trata o projeto como uma parede contínua,
+  não por vão). Fórmula da metragem corrigida em 2026-08-28 (ver Histórico); o cálculo
+  de barras passou de soma linear pro Plano de Corte em 2026-09-03.
+- Perfil U = cada peça emoldurada individualmente (2 cortes de `larguraPorPeça` + 2 de
+  `H`) — os cortes de **todas** as peças entram no mesmo Plano de Corte (permite emenda
+  entre peças, como no Slim). Substituiu a soma linear em 2026-09-03.
+- Exemplo de referência (validado): 6,00m × 3,00m → 6 peças. Tubo = cortes [6 (topo),
+  3×7 (verticais)] → **5 barras** (mesmo resultado da soma linear antiga: 27m/6m=5,
+  porque os cortes redondos não geram retalho descartável aqui). Perfil U = 6 peças ×
+  [1, 1, 3, 3] → **9 barras** (a soma linear ingênua diria 48m/6m=8 — a intercalação de
+  cortes de 1m e 3m gera desperdício real que a divisão linear escondia; é exatamente o
+  tipo de divergência que motivou a correção).
 
 **Fórmula Sacada (`lib/calculators/sacada.ts`)** — não usa tipo de vão (`usaTipoVao:
 false`), usa cor do vidro (`usaCorVidro: true`). Cada vão da Sacada é um módulo
@@ -689,6 +717,52 @@ importantes:
 
 > Entradas resumidas, mais recente primeiro. Não precisa repetir o que já está descrito
 > nas seções acima — só registrar o quê e (se não-óbvio) o porquê.
+
+- **2026-09-03** — Plano de Corte global com descarte de retalho < 2,00m (Tubo 2x2 e
+  Perfil U), aplicado ao MiterGlass e ao Slim/Slim 8mm. Corrige um segundo erro de
+  regra de negócio na mesma família do bug do Tubo 2x2 do Slim (ver entrada de
+  2026-09-01 abaixo): a soma linear (metragem total ÷ 6, `Math.ceil`) — ainda usada no
+  MiterGlass inteiro e no Perfil U do Slim — presumia que QUALQUER sobra, por menor que
+  fosse, era 100% reaproveitável no próximo corte. Na obra real, um retalho pequeno
+  demais é descartado — reportado pelo usuário como 21 barras calculadas contra 24
+  reais numa obra com verticais de 2,68m.
+  - Nova função utilitária `calcularPlanoDeCorte(cortes: number[], tamanhoBarra = 6)`
+    em `lib/calculators/utils.ts` — bin-packing 1D First Fit com uma regra nova: toda
+    sobra menor que `SOBRA_MINIMA_REAPROVEITAVEL_M` (2,00m) é descartada como retalho
+    assim que aparece, não fica disponível pros próximos cortes (mesmo que um corte
+    *futuro* menor ainda coubesse nela — a regra é sobre o tamanho da sobra no
+    momento, não uma otimização global). Corte `> tamanhoBarra` continua contando
+    `Math.ceil(corte / tamanhoBarra)` barras cheias sem sobra (mesma defesa já existente
+    pro Tubo 2x2 do Slim); corte `<= 0` não consome barra.
+  - **`lib/calculators/slim.ts`**: `planoCorteTubo2x2()` (isolado por vão, zero emendas)
+    foi refatorado pra delegar pra `calcularPlanoDeCorte()` em vez da função local
+    `barrasNecessarias()` (removida) — mesmo comportamento de antes, agora com a regra
+    de descarte também. **Perfil U deixou de ser soma linear**: os cortes de topo, base
+    e as duas laterais de CADA vão (`[largura, largura, altura, altura]`) entram num
+    único plano de corte pro projeto inteiro (Perfil U permite emenda entre peças,
+    diferente do Tubo 2x2 — por isso não é isolado por vão como ele).
+  - **`lib/calculators/miterglass.ts`**: Tubo 2x2 (topo + verticais, já era um plano
+    único pro "wall" contínuo) e Perfil U (2 cortes de `larguraPorPeça` + 2 de altura,
+    por peça, todas as peças no mesmo plano) passam a usar `calcularPlanoDeCorte()` em
+    vez de `Math.ceil(metragemTotal / 6)`.
+  - Perfil Engenharia (Slim) fica **fora do escopo**, de propósito — continua soma
+    linear simples, não foi pedido nem tem a mesma urgência de negócio.
+  - Exemplos de referência recalculados (todos validados por script isolado): MiterGlass
+    6,00×3,00m → Tubo continua 5 barras (cortes redondos, sem retalho descartado), mas
+    Perfil U sobe de 8 para **9 barras** (a intercalação de cortes de 1m e 3m gera
+    desperdício real que a divisão linear escondia). Slim: 3 vãos de 1×1m → Perfil U
+    linear diria 2 barras (12m/6m), o plano de corte real precisa de **3** (depois do 5º
+    corte de 1m numa barra a sobra vira exatamente 1,00m e é descartada na hora, mesmo
+    cabendo mais um corte de 1m — é a regra "não fica pro futuro" fazendo exatamente o
+    que devia). Cenário original do usuário (verticais de 2,68m): confirmado que cada
+    par de 2,68m consome 1 barra inteira (sobra de 0,64m sempre descartada), sem exceção.
+  - Validado por `tsc`/`eslint`/`build` (limpos) + script isolado (`tsx`, 20 asserções):
+    `calcularPlanoDeCorte` isolada (retalho exatamente 2,00m ainda reaproveitável,
+    1,99m descartado, corte 0m ignorado, corte > barra), os dois exemplos de referência
+    do MiterGlass, o cenário de 2,68m do usuário propagado no Slim, o caso dos 12 cortes
+    de 1m no Perfil U do Slim, e zero centavos em todo subtotal mesmo com preços
+    fracionados nos dois modelos — todos batendo. Dev server sobe sem erros; UI segue
+    não verificada ao vivo (login).
 
 - **2026-09-03** — Detalhamento por Vão no Orçamento Simplificado: cada card de modelo
   ganhou uma seção sanfonada ("Detalhamento por Vão", `<details>`/`<summary>` nativo,

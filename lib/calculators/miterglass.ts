@@ -1,5 +1,8 @@
+import { calcularPlanoDeCorte } from "./utils";
 import type { CalculoItem, ProjectInputs, Vao } from "../types";
 import type { EstrategiaCalculoModelo, GetValor } from "./types";
+
+const TAMANHO_BARRA_M = 6;
 
 /**
  * MiterGlass é modulado em painéis (peças) de ~1m, não em vãos com tipo de porta —
@@ -11,10 +14,18 @@ import type { EstrategiaCalculoModelo, GetValor } from "./types";
  * vidro, porém, soma a área individual de cada vão (mais preciso se as alturas
  * variarem entre eles).
  *
- * Exemplo de referência (6,00m × 3,00m):
+ * Tubo 2x2 e Perfil U usam o Plano de Corte real (`calcularPlanoDeCorte`, bin-packing
+ * com retalho mínimo reaproveitável de 2m — ver lib/calculators/utils.ts), não mais
+ * soma linear ÷ 6: a soma linear presumia que qualquer sobra, por menor que fosse,
+ * seria 100% reaproveitada no próximo corte, o que subestimava o consumo real de
+ * barras (ex. reportado: 21 barras calculadas contra 24 reais na obra).
+ *
+ * Exemplo de referência (6,00m × 3,00m, valores redondos — sem retalho descartado):
  * peças = 6 (6m ÷ 1m)
- * tubo = topo (6m) + verticais (6+1=7 × 3m = 21m) = 27m → 5 barras de 6m
- * perfil U = (2×1 + 2×3) × 6 peças = 8 × 6 = 48m → 8 barras de 6m
+ * tubo: cortes = [6 (topo), 3×7 (verticais)] → plano de corte → 5 barras de 6m
+ * perfil U: cortes = 6 peças × [1, 1, 3, 3] → plano de corte → 9 barras de 6m (a ordem
+ * intercalada dos cortes gera mais desperdício que a divisão linear ingênua de 48m/6=8
+ * barras escondia — o ponto exato desta correção).
  */
 function calcularEstrutura(inputs: ProjectInputs, getValor: GetValor): CalculoItem[] {
   const vaos: Vao[] = inputs.vaos;
@@ -26,40 +37,48 @@ function calcularEstrutura(inputs: ProjectInputs, getValor: GetValor): CalculoIt
   const pecas = Math.max(1, Math.round(largura));
   const larguraPorPeca = largura / pecas;
 
-  // Tubo 2x2: topo (a largura toda, uma vez) + um vertical por peça + 1 (as duas
-  // bordas externas + cada divisão interna entre peças), cada vertical com a
-  // altura toda.
+  // Tubo 2x2: topo (a largura toda, um corte só) + um vertical por peça + 1 (as duas
+  // bordas externas + cada divisão interna entre peças), cada vertical com a altura
+  // toda — tudo no MESMO plano de corte (MiterGlass trata o projeto como uma parede
+  // contínua, não isolada por vão como o Slim).
   const qtdVerticaisTubo = pecas + 1;
-  const metragemTuboTopo = largura;
-  const metragemTuboVerticais = qtdVerticaisTubo * altura;
-  const metragemTubo = metragemTuboTopo + metragemTuboVerticais;
-  const barrasTubo = Math.ceil(metragemTubo / 6);
-  const custoTubo = barrasTubo * getValor("tubo2x2");
+  const cortesTubo: number[] = [largura, ...Array(qtdVerticaisTubo).fill(altura)];
+  const barrasTubo = calcularPlanoDeCorte(cortesTubo, TAMANHO_BARRA_M);
+  const metragemTuboCobrada = barrasTubo * TAMANHO_BARRA_M;
 
-  // Perfil U: cada peça é emoldurada individualmente (perímetro próprio de
-  // largura×altura), depois soma-se pela quantidade de peças.
-  const metragemPerfilUPorPeca = 2 * larguraPorPeca + 2 * altura;
-  const metragemPerfilU = metragemPerfilUPorPeca * pecas;
-  const barrasPerfilU = Math.ceil(metragemPerfilU / 6);
-  const custoPerfilU = barrasPerfilU * getValor("perfilU");
+  // Perfil U: cada peça é emoldurada individualmente (2 cortes de larguraPorPeça + 2
+  // cortes de altura) — os cortes de TODAS as peças entram no mesmo plano de corte
+  // (Perfil U permite emenda/reaproveitamento entre peças).
+  const cortesPerfilU: number[] = [];
+  for (let i = 0; i < pecas; i++) {
+    cortesPerfilU.push(larguraPorPeca, larguraPorPeca, altura, altura);
+  }
+  const barrasPerfilU = calcularPlanoDeCorte(cortesPerfilU, TAMANHO_BARRA_M);
+  const metragemPerfilUCobrada = barrasPerfilU * TAMANHO_BARRA_M;
 
   return [
     {
       label: "Vidro",
       detalhe: `${areaVidro.toFixed(2)} m² × ${getValor("vidro").toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`,
-      subtotal: areaVidro * getValor("vidro"),
+      subtotal: Math.round(areaVidro * getValor("vidro")),
       grupo: "estrutural",
     },
     {
       label: "Perfil U (perímetro por peça)",
-      detalhe: `${pecas} peça(s) × ${metragemPerfilUPorPeca.toFixed(2)} m/peça = ${metragemPerfilU.toFixed(2)} m → ${barrasPerfilU} barra(s) de 6m`,
-      subtotal: custoPerfilU,
+      detalhe:
+        pecas > 0
+          ? `${pecas} peça(s) × (2×${larguraPorPeca.toFixed(2)}m + 2×${altura.toFixed(2)}m) → plano de corte (retalho < 2,00m descartado) → ${barrasPerfilU} barra(s) de 6m (${metragemPerfilUCobrada.toFixed(2)} m cobrados)`
+          : "Nenhum vão cadastrado",
+      subtotal: Math.round(barrasPerfilU * getValor("perfilU")),
       grupo: "estrutural",
     },
     {
       label: "Tubo 2x2 (topo + verticais)",
-      detalhe: `topo ${metragemTuboTopo.toFixed(2)} m + (${pecas} peça(s) + 1 = ${qtdVerticaisTubo} vertical(is) × ${altura.toFixed(2)} m = ${metragemTuboVerticais.toFixed(2)} m) = ${metragemTubo.toFixed(2)} m → ${barrasTubo} barra(s) de 6m`,
-      subtotal: custoTubo,
+      detalhe:
+        pecas > 0
+          ? `topo ${largura.toFixed(2)}m + ${qtdVerticaisTubo} vertical(is) de ${altura.toFixed(2)}m → plano de corte (retalho < 2,00m descartado) → ${barrasTubo} barra(s) de 6m (${metragemTuboCobrada.toFixed(2)} m cobrados)`
+          : "Nenhum vão cadastrado",
+      subtotal: Math.round(barrasTubo * getValor("tubo2x2")),
       grupo: "estrutural",
     },
   ];
