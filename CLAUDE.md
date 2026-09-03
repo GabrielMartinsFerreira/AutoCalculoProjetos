@@ -690,6 +690,32 @@ importantes:
 > Entradas resumidas, mais recente primeiro. Não precisa repetir o que já está descrito
 > nas seções acima — só registrar o quê e (se não-óbvio) o porquê.
 
+- **2026-09-03** — Detalhamento por Vão no Orçamento Simplificado: cada card de modelo
+  ganhou uma seção sanfonada ("Detalhamento por Vão", `<details>`/`<summary>` nativo,
+  sem estado novo no React) listando "Vão N: X m² → R$Y" pra cada vão cadastrado,
+  calculado com o `valorM2` **daquele modelo específico** (os vãos são globais da
+  página, mas o preço por m² é por modelo — por isso o detalhamento mora dentro de cada
+  card, não uma vez só no topo).
+  - `lib/useSimplifiedCalculator.ts`: `custoBase` deixou de ser
+    `Math.round(áreaTotal × valorM2)` e passou a ser a **soma** de
+    `detalhamentoPorVao[].valor` (cada vão já `Math.round(áreaDoVão × valorM2)`
+    individualmente). Não é só estética — arredondar por vão e depois somar, em vez de
+    somar e arredondar uma vez, evita a divergência de R$1-2 entre a lista exibida e o
+    Subtotal Base que os dois métodos podem produzir (ex. validado: 3 vãos com medidas
+    quebradas fecham em R$8.653 somando por vão, contra R$8.654 se arredondasse só a
+    área total — a Regra de Ouro exige que a lista bata exatamente com o total, então
+    manter dois métodos diferentes não era opção).
+  - `ResultadoSimplificadoItem.detalhamentoPorVao: DetalheVaoSimplificado[]`
+    (`{ vaoId, largura, altura, area, valor }`) novo em `lib/types.ts` — `area` fica sem
+    arredondar (é m², não dinheiro), só `valor` passa por `Math.round`.
+  - Validado por `tsc`/`eslint`/`build` (limpos) + script isolado (`tsx`) com 3 vãos de
+    medidas propositalmente quebradas (2,88 / 1,36 / 4,87 m²): cada linha bate com o
+    valor esperado, a soma das linhas fecha exatamente com `custoBase`, vão zerado e
+    lista vazia não quebram, e o mesmo vão gera valores diferentes em modelos com
+    `valorM2` diferente (Slim R$950/m² vs. MiterGlass R$1.270/m²) — confirma que o
+    detalhamento é por modelo, não um dado global reaproveitado. Dev server sobe sem
+    erros; UI segue não verificada ao vivo (login).
+
 - **2026-09-03** — Revisão geral do projeto + 3 pedidos do usuário (Sacada +15%,
   Espelho multi-peças, "Adicionar Item" mostrando tudo). Bugs corrigidos:
   - **"Adicionar Item" só mostrava os primeiros modelos**: o menu era um `div absolute`

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Plus, RotateCcw, Save } from "lucide-react";
+import { Check, ChevronDown, Plus, RotateCcw, Save } from "lucide-react";
 import { useOrcamentoSimplificadoDraft, useProductStore } from "@/lib/store";
 import { useSimplifiedCalculator } from "@/lib/useSimplifiedCalculator";
 import { OPCIONAIS_PADRAO } from "@/lib/types";
@@ -234,6 +234,25 @@ export function SimplifiedCalculator() {
                     <span>Base</span>
                     <span className="font-mono">{formatBRL(item.custoBase)}</span>
                   </div>
+
+                  {item.detalhamentoPorVao.length > 0 && (
+                    <details className="group rounded-lg border border-zinc-100 dark:border-zinc-800">
+                      <summary className="flex cursor-pointer list-none items-center justify-between px-2.5 py-1.5 text-[0.7rem] font-medium text-zinc-500 marker:hidden [&::-webkit-details-marker]:hidden dark:text-zinc-400">
+                        <span>Detalhamento por Vão</span>
+                        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform group-open:rotate-180 dark:text-zinc-500" />
+                      </summary>
+                      <ul className="flex flex-col gap-1.5 border-t border-zinc-100 px-2.5 py-2 dark:border-zinc-800">
+                        {item.detalhamentoPorVao.map((d, vi) => (
+                          <li key={d.vaoId} className="flex items-center justify-between gap-2 text-[0.7rem]">
+                            <span className="text-zinc-500 dark:text-zinc-400">
+                              Vão {vi + 1}: <span className="font-mono">{d.area.toFixed(2)} m²</span>
+                            </span>
+                            <span className="font-mono text-zinc-600 dark:text-zinc-300">{formatBRL(d.valor)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
 
                   <div className="flex flex-col gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
                     {pelicula && (

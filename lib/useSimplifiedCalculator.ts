@@ -3,6 +3,7 @@ import { useModeloStore, useProductStore } from "./store";
 import { OPCIONAIS_PADRAO } from "./types";
 import type {
   CalculoItem,
+  DetalheVaoSimplificado,
   Modelo,
   Product,
   ProductKey,
@@ -23,6 +24,13 @@ function valorDoModelo(products: Product[], key: ProductKey) {
  * redondas — assim o que o card mostra linha a linha sempre fecha com o total mostrado
  * (antes, cada linha era arredondada só na exibição e a soma visível podia diferir do
  * total visível em R$1).
+ *
+ * Desde 2026-09-03, o próprio `custoBase` segue essa regra por VÃO: cada vão vira um
+ * `Math.round(área do vão × valorM2 do modelo)` (`detalhamentoPorVao`), e `custoBase` é
+ * a SOMA desses valores já redondos — nunca `Math.round(área total × valorM2)`. Isso
+ * garante que a lista "Detalhamento por Vão" da UI feche exatamente com o Subtotal Base
+ * exibido, sem a divergência de R$1-2 que dois arredondamentos independentes (por vão
+ * vs. da área total) poderiam gerar.
  */
 export function calcularOrcamentoSimplificado(
   inputs: SimplifiedInputs,
@@ -33,7 +41,17 @@ export function calcularOrcamentoSimplificado(
 
   const porModelo = modelos.map((m) => {
     const opcionais = inputs.opcionaisPorModelo[m.id] ?? OPCIONAIS_PADRAO;
-    const custoBase = Math.round(area * m.valorM2);
+    const detalhamentoPorVao: DetalheVaoSimplificado[] = inputs.vaos.map((v) => {
+      const areaVao = v.largura * v.altura;
+      return {
+        vaoId: v.id,
+        largura: v.largura,
+        altura: v.altura,
+        area: areaVao,
+        valor: Math.round(areaVao * m.valorM2),
+      };
+    });
+    const custoBase = detalhamentoPorVao.reduce((acc, d) => acc + d.valor, 0);
     const produtosModelo = productsByModelo[m.id] ?? [];
 
     const custoPelicula = Math.round(
@@ -91,6 +109,7 @@ export function calcularOrcamentoSimplificado(
       nomeModelo: m.nome,
       valorM2: m.valorM2,
       custoBase,
+      detalhamentoPorVao,
       opcionais: itensOpcionais,
       custoOpcionaisTotal,
       custoRT,

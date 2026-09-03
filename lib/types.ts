@@ -269,11 +269,30 @@ export interface SimplifiedInputs {
   modelosDesmarcados: string[];
 }
 
+/** Um vão, decomposto pro valor deste modelo específico — ver `DetalhamentoVaoSimplificado` abaixo. */
+export interface DetalheVaoSimplificado {
+  vaoId: string;
+  largura: number;
+  altura: number;
+  /** largura × altura, sem arredondar (m² é exibido com casas decimais, não é dinheiro). */
+  area: number;
+  /** Math.round(area × valorM2 do modelo) — já arredondado, ver Regra de Ouro em custoBase. */
+  valor: number;
+}
+
 export interface ResultadoSimplificadoItem {
   modeloId: string;
   nomeModelo: string;
   valorM2: number;
+  /**
+   * Soma de `detalhamentoPorVao[].valor` (cada vão já arredondado) — NÃO é
+   * `Math.round(area total × valorM2)`. Arredondar por vão e depois somar, em vez de
+   * somar e arredondar uma vez só, é o que garante que a lista "Detalhamento por Vão" e
+   * o Subtotal Base batam sempre exatamente (Regra de Ouro).
+   */
   custoBase: number;
+  /** Quebra do custoBase por vão, pra UI mostrar "Vão N: X m² → R$Y". */
+  detalhamentoPorVao: DetalheVaoSimplificado[];
   opcionais: CalculoItem[];
   custoOpcionaisTotal: number;
   /** Reserva Técnica calculada pra este modelo (fixo, ou % sobre custoBase + custoOpcionaisTotal). */
